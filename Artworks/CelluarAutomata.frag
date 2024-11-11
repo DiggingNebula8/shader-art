@@ -5,14 +5,14 @@ float cellInfluence(vec3 p, float time) {
     float distanceToCell = length(p - cellCenter); // Distance to cell center
 
     // Wave-based smooth influence for fluid transitions
-    float intensity = sin(time + dot(cellPosition, vec3(0.0, 0.0, 0.100)));
-    float radius = 0.5 * intensity;             // Radius varies smoothly with intensity
+    float intensity = sin(time + dot(cellPosition, vec3(5.0, 10.0, 0.100)));
+    float radius = 0.4 * intensity;             // Radius varies smoothly with intensity
 
     return distanceToCell - radius;             // Distance field for the cell
 }
 
 // Rotation speed for each axis
-vec3 rotationSpeed = vec3(0., 0., 10.0); // Adjust these values for desired speed
+vec3 rotationSpeed = vec3(0., 0., 100.0); // Adjust these values for desired speed
 
 // Function to rotate a vector around the X-axis by a given angle
 vec3 rotateX(vec3 p, float angle) {
@@ -66,8 +66,9 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
 
     // Ray origin and direction setup
     vec3 ro = vec3(0, 0, 0);
-    vec3 rd = normalize(vec3(uv, 5));
+    vec3 rd = normalize(vec3(uv, 10.));
     vec3 col = vec3(0);
+
 
     // Raymarching loop
     float t = 0.0;
@@ -81,6 +82,6 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     }
 
     // Color based on distance t, smoother effect
-    col = vec3(0.2 + 0.8 * exp(-t * .1));
+    col = vec3(.2 + 1. * exp(-t * .1));
     fragColor = vec4(col,1.0);
 }
