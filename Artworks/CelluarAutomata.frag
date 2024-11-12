@@ -12,7 +12,7 @@ vec2 cellInfluence(vec3 p, float time) {
 }
 
 // Rotation speed for each axis
-vec3 rotationSpeed = vec3(0., 0., 10.0); // Adjust these values for desired speed
+vec3 rotationSpeed = vec3(0., 0., 7.0); // Adjust these values for desired speed
 
 // Function to rotate a vector around the X-axis by a given angle
 vec3 rotateX(vec3 p, float angle) {
@@ -38,9 +38,9 @@ vec3 rotateZ(vec3 p, float angle) {
 // Scene distance function with rotation applied
 vec2 map(vec3 p) {
     // Apply rotation based on time and rotation speed for each axis
-    float angleX = iTime * rotationSpeed.x * saturate(p.x * 0.000002);
-    float angleY = iTime * rotationSpeed.y * saturate(p.y * 0.000002);
-    float angleZ = iTime * rotationSpeed.z * saturate(p.z * 0.000002);
+    float angleX = rotationSpeed.x * saturate(p.x * 0.02);
+    float angleY = rotationSpeed.y * saturate(p.y * 0.02);
+    float angleZ = rotationSpeed.z * saturate(p.z * 0.02);
 
     // Rotate point p around each axis
     p = rotateX(p, angleX);
