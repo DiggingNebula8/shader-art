@@ -9,10 +9,10 @@ void mainImage(out vec4 fragColor, vec2 fragCoords) {
     float time = iTime;
 
     // Spiral pattern control variables
-    float spiralFactor = 0.1;
-    float scale = 3.0;
+    float spiralFactor = .2;
+    float scale = 4.0;
     float brightness = 2.0;
-    float maxExponent = 25.0;
+    float maxExponent = 30.0;
     float angleOffset = 0.314;
     float modulationFactor = 0.1;
     float fractOffset = 0.5;
