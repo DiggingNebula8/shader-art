@@ -1,4 +1,4 @@
-void mainImage(out vec4 finalImage, vec2 texCoords) {
+void mainImage(out vec4 fragColor, vec2 fragCoords) {
     // Screen resolution
     vec3 screenRes = iResolution;
 
@@ -9,10 +9,10 @@ void mainImage(out vec4 finalImage, vec2 texCoords) {
     float time = iTime;
 
     // Spiral pattern control variables
-    float spiralFactor = 0.1;
-    float scale = 3.0;
+    float spiralFactor = .2;
+    float scale = 4.0;
     float brightness = 2.0;
-    float maxExponent = 25.0;
+    float maxExponent = 30.0;
     float angleOffset = 0.314;
     float modulationFactor = 0.1;
     float fractOffset = 0.5;
@@ -51,21 +51,21 @@ void mainImage(out vec4 finalImage, vec2 texCoords) {
         float colourMask = clamp(cos(time * scale) + sin(time * scale), 0.0, 1.0);
 
         // Add to final image using brightness and vector length
-        finalImage += (brightness + cosValue) * (brightness + sinValue) / (vectorLength * vectorScale);
+        fragColor += (brightness + cosValue) * (brightness + sinValue) / (vectorLength * vectorScale);
 
         // Normalize and scale the position vector
         o = spiralFactor * normalize(
-            vec3((texCoords + texCoords - screenRes.xy) * mat2(cos(rotationConstants + time * scale)), screenRes.y)
+            vec3((fragCoords + fragCoords - screenRes.xy) * mat2(cos(rotationConstants + time * scale)), screenRes.y)
         );
 
         // Clamp final image values
-        finalImage = clamp(finalImage, 0.0, 1.0);
+        fragColor = clamp(fragColor, 0.0, 1.0);
 
         // Define two colors for mixing
-        vec3 mixedColor1 = finalImage.xyz * color1;
-        vec3 mixedColor2 = finalImage.xyz * color2;
+        vec3 mixedColor1 = fragColor.xyz * color1;
+        vec3 mixedColor2 = fragColor.xyz * color2;
 
         // Mix colors based on the color mask
-        finalImage = vec4(mix(mixedColor1, mixedColor2, colourMask), 0.0);
+        fragColor = vec4(mix(mixedColor1, mixedColor2, colourMask), 1.0);
     }
 }
