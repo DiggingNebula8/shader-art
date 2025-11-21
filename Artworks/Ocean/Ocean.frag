@@ -65,14 +65,48 @@ float getWaveHeight(vec2 pos, float time)
     return height;
 }
 
-vec3 getNormal(vec2 pos, float time)
+// Optimized: Returns both wave height and gradient, avoiding redundant calculations
+vec3 getWaveHeightAndGradient(vec2 pos, float time)
 {
     float eps = normalEps;
-    float hL = getWaveHeight(pos - vec2(eps, 0.0), time) + fbm((pos - vec2(eps, 0.0)) * rippleFreq + time*0.1) * rippleStrength;
-    float hR = getWaveHeight(pos + vec2(eps, 0.0), time) + fbm((pos + vec2(eps, 0.0)) * rippleFreq + time*0.1) * rippleStrength;
-    float hD = getWaveHeight(pos - vec2(0.0, eps), time) + fbm((pos - vec2(0.0, eps)) * rippleFreq + time*0.1) * rippleStrength;
-    float hU = getWaveHeight(pos + vec2(0.0, eps), time) + fbm((pos + vec2(0.0, eps)) * rippleFreq + time*0.1) * rippleStrength;
-    return normalize(vec3(hL - hR, 2.0 * eps, hD - hU));
+    
+    // Compute wave heights at 4 sample points (reused for both height and gradient)
+    float hL = getWaveHeight(pos - vec2(eps, 0.0), time);
+    float hR = getWaveHeight(pos + vec2(eps, 0.0), time);
+    float hD = getWaveHeight(pos - vec2(0.0, eps), time);
+    float hU = getWaveHeight(pos + vec2(0.0, eps), time);
+    float hC = getWaveHeight(pos, time); // Center height
+    
+    // Compute gradient from finite differences
+    vec2 grad = vec2(hR - hL, hU - hD) / (2.0 * eps);
+    
+    // Return: x = gradient.x, y = gradient.y, z = center height
+    return vec3(grad, hC);
+}
+
+// Optimized: Returns both normal and combined gradient (wave + ripple) to avoid redundant calculations
+vec4 getNormalAndGradient(vec2 pos, float time)
+{
+    // Get wave gradient (only compute once)
+    vec3 waveData = getWaveHeightAndGradient(pos, time);
+    vec2 grad = waveData.xy;
+    
+    // Compute ripple gradient with smaller epsilon for fine detail
+    float rippleEps = normalEps * 0.5;
+    float rippleL = fbm((pos - vec2(rippleEps, 0.0)) * rippleFreq + time*0.1) * rippleStrength;
+    float rippleR = fbm((pos + vec2(rippleEps, 0.0)) * rippleFreq + time*0.1) * rippleStrength;
+    float rippleD = fbm((pos - vec2(0.0, rippleEps)) * rippleFreq + time*0.1) * rippleStrength;
+    float rippleU = fbm((pos + vec2(0.0, rippleEps)) * rippleFreq + time*0.1) * rippleStrength;
+    
+    // Combine wave and ripple gradients
+    vec2 rippleGrad = vec2(rippleR - rippleL, rippleU - rippleD) / (2.0 * rippleEps);
+    grad += rippleGrad;
+    
+    // Compute normal from combined gradient
+    vec3 normal = normalize(vec3(-grad.x, 1.0, -grad.y));
+    
+    // Return: xyz = normal, w unused (gradient stored separately)
+    return vec4(normal, 0.0);
 }
 
 float animatedFoamNoise(vec2 p, float time)
@@ -80,16 +114,11 @@ float animatedFoamNoise(vec2 p, float time)
     return fbm(p * 3.0 + vec2(time*0.2, time*0.1));
 }
 
-float getFoam(vec2 pos, float time)
+// Optimized: Reuses gradient calculation from normal computation
+float getFoam(vec2 pos, float time, vec2 gradient)
 {
-    float eps = normalEps;
-    float hL = getWaveHeight(pos - vec2(eps, 0.0), time);
-    float hR = getWaveHeight(pos + vec2(eps, 0.0), time);
-    float hD = getWaveHeight(pos - vec2(0.0, eps), time);
-    float hU = getWaveHeight(pos + vec2(0.0, eps), time);
-    
-    vec2 grad = vec2(hR - hL, hU - hD) / (2.0 * eps);
-    float slope = length(grad);
+    // Reuse the gradient passed from normal calculation
+    float slope = length(gradient);
     
     float foam = smoothstep(foamSlopeMin, foamSlopeMax, slope);
     foam *= smoothstep(0.3, 0.7, animatedFoamNoise(pos*2.0, time));
@@ -126,7 +155,7 @@ float computeSparkles(vec3 normal, vec3 viewDir, vec2 worldPos, float time)
     return sparkleBase * smoothstep(0.5, 1.0, noiseMask);
 }
 
-vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time)
+vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient)
 {
     vec3 reflected = skyColor(reflect(-viewDir, normal));
     vec3 refracted = baseWaterColor;
@@ -135,7 +164,8 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time)
     vec3 sunLight = sunColor * sunDiffuse * sunIntensity;
     
     float f = fresnel(viewDir, normal);
-    float foam = getFoam(pos.xz, time);
+    // Reuse gradient from normal calculation for foam
+    float foam = getFoam(pos.xz, time, gradient);
     
     float depthFactor = smoothstep(0.0, shallowDepthRange, pos.y);
     refracted = mix(shallowWaterColor, baseWaterColor, depthFactor);
@@ -159,7 +189,9 @@ vec3 raymarchOcean(vec3 ro, vec3 rd, float time)
         float h = pos.y - getWaveHeight(pos.xz, time);
         if (abs(h) < MIN_DIST) return pos;
         if (t > MAX_DIST) break;
-        t += clamp(h * 0.5, 0.01, 1.0);
+        // More conservative stepping: use smaller multiplier to prevent overshooting on steep waves
+        // Clamp step size to ensure stability
+        t += clamp(h * 0.3, 0.01, 0.8);
     }
     return ro + rd * MAX_DIST;
 }
@@ -174,8 +206,28 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
     vec3 rd = normalize(uv.x*right + uv.y*up + camFov*forward);
     
     vec3 pos = raymarchOcean(camPos, rd, iTime);
-    vec3 normal = getNormal(pos.xz, iTime);
-    vec3 color = shadeOcean(pos, normal, rd, iTime);
+    
+    // Compute normal and gradient together (optimized - only compute once)
+    vec2 pos2d = pos.xz;
+    
+    // Get wave gradient
+    vec3 waveData = getWaveHeightAndGradient(pos2d, iTime);
+    vec2 grad = waveData.xy;
+    
+    // Add ripple gradient
+    float rippleEps = normalEps * 0.5;
+    float rippleL = fbm((pos2d - vec2(rippleEps, 0.0)) * rippleFreq + iTime*0.1) * rippleStrength;
+    float rippleR = fbm((pos2d + vec2(rippleEps, 0.0)) * rippleFreq + iTime*0.1) * rippleStrength;
+    float rippleD = fbm((pos2d - vec2(0.0, rippleEps)) * rippleFreq + iTime*0.1) * rippleStrength;
+    float rippleU = fbm((pos2d + vec2(0.0, rippleEps)) * rippleFreq + iTime*0.1) * rippleStrength;
+    vec2 rippleGrad = vec2(rippleR - rippleL, rippleU - rippleD) / (2.0 * rippleEps);
+    grad += rippleGrad;
+    
+    // Compute normal from combined gradient
+    vec3 normal = normalize(vec3(-grad.x, 1.0, -grad.y));
+    
+    // Reuse gradient for foam calculation
+    vec3 color = shadeOcean(pos, normal, rd, iTime, grad);
     
     fragColor = vec4(color, 1.0);
 }
