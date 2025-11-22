@@ -282,6 +282,10 @@ float computeSparkles(vec3 normal, vec3 viewDir, vec2 worldPos, float time)
 vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient)
 {
     // viewDir is now surface → camera (corrected convention)
+<<<<<<< HEAD
+=======
+    vec3 reflected = skyColor(reflect(-viewDir, normal));
+>>>>>>> a1d397bb5c261f3bf051077369bd44a1a99d6946
     vec3 refracted = baseWaterColor;
     
     // PBR: Compute Fresnel for energy conservation
