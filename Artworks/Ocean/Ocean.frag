@@ -26,18 +26,20 @@ float rippleStrength = 0.2;
 float rippleFreq = 10.0;
 
 // Lighting
-vec3 sunDirection = normalize(vec3(0.8, 1.0, 0.6));
-vec3 sunColor = vec3(1.2, 1.0, 0.8);
-float sunIntensity = .1;
+vec3 sunDirection = normalize(vec3(0.8, 1.0, 0.6));  // Sun direction (elevated, slightly forward)
+vec3 sunColor = vec3(1.2, 1.0, 0.8);  // Warm sunlight color
+float sunIntensity = 0.4;  // Sun intensity (adjusted for PBR + tone mapping - was 0.1, too dark)
 
 // PBR Material Properties
 const float waterIOR = 1.33;              // Index of refraction (water)
 const float airIOR = 1.0;                 // Index of refraction (air)
+// Compute F0 from IOR for physical accuracy: F0 = ((n1 - n2) / (n1 + n2))²
+// For water-air interface: F0 = ((1.33 - 1.0) / (1.33 + 1.0))² ≈ 0.0201
+const vec3 F0_dielectric = vec3(pow((waterIOR - airIOR) / (waterIOR + airIOR), 2.0));
 const vec3 waterAbsorption = vec3(0.45, 0.03, 0.015);  // Absorption coefficient (red absorbs most, blue least)
 const float roughness = 0.02;             // Surface roughness (0=smooth, 1=rough)
 const float metallic = 0.0;               // Not metallic (dielectric)
 const vec3 albedo = vec3(0.0, 0.3, 0.5);  // Base color
-const vec3 F0_dielectric = vec3(0.02);    // Fresnel F0 for dielectrics (water)
 
 // Foam
 float foamSlopeMin = 0.5;
@@ -211,14 +213,24 @@ vec3 skyColor(vec3 dir)
     return mix(vec3(0.6, 0.7, 0.9), vec3(0.1, 0.3, 0.6), dir.y * 0.5 + 0.5);
 }
 
-// PBR: Environment-based ambient lighting
-// Samples sky color based on normal direction for more realistic ambient
-vec3 getEnvironmentLight(vec3 normal)
+// PBR: Environment-based ambient lighting with Fresnel weighting
+// Returns both diffuse and specular ambient components for energy conservation
+void getEnvironmentLight(vec3 normal, vec3 viewDir, vec3 F, out vec3 ambientDiffuse, out vec3 ambientSpecular)
 {
-    // Sample sky color in the direction of the normal (hemisphere sampling)
+    // Diffuse ambient: sample sky color in the direction of the normal (hemisphere sampling)
     // Bias towards upward direction for more realistic ambient
-    vec3 skyDir = normalize(normal + vec3(0.0, 1.0, 0.0));
-    return skyColor(skyDir) * 0.3; // Scale down for ambient contribution
+    vec3 skyDirDiffuse = normalize(normal + vec3(0.0, 1.0, 0.0));
+    vec3 skyColorDiffuse = skyColor(skyDirDiffuse) * 0.25; // Scale down for ambient contribution (balanced with sun)
+    
+    // Specular ambient: sample sky color in the reflection direction
+    // This accounts for environment reflection at grazing angles (where Fresnel is high)
+    vec3 reflectedDir = reflect(-viewDir, normal);
+    vec3 skyColorSpecular = skyColor(reflectedDir) * 0.25; // Balanced with sun intensity
+    
+    // Energy-conserving split: kD for diffuse, F (Fresnel) for specular
+    vec3 kD = (1.0 - F) * (1.0 - metallic);
+    ambientDiffuse = skyColorDiffuse * albedo * kD;
+    ambientSpecular = skyColorSpecular * F;
 }
 
 // PBR: Tone mapping (Reinhard)
@@ -309,18 +321,27 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient)
     // Lambertian diffuse: kD * albedo * lightColor * NdotL / PI
     vec3 diffuse = kD * albedo * lightColor * NdotL / PI;
     
-    // Environment-based ambient (samples sky based on normal)
-    vec3 ambient = getEnvironmentLight(normal) * albedo;
+    // PBR: Environment-based ambient with Fresnel weighting
+    // Split into diffuse and specular components for energy conservation
+    vec3 ambientDiffuse, ambientSpecular;
+    getEnvironmentLight(normal, viewDir, F, ambientDiffuse, ambientSpecular);
+    vec3 ambient = ambientDiffuse + ambientSpecular;
     
     // Reflection/refraction contribution (integrated into BRDF)
-    // Reflection is already handled by specular BRDF, refraction contributes to base color
-    // Mix reflection and refraction based on Fresnel
-    // reflect() expects incident direction (toward surface), but viewDir is surface → camera
+    // Note: This is a simplified approximation for real-time rendering.
+    // The specular BRDF already handles sun reflection correctly via Cook-Torrance.
+    // Here we approximate sky reflection/refraction mixing:
+    // - At perpendicular angles (low Fresnel): mostly refraction (water color)
+    // - At grazing angles (high Fresnel): mostly reflection (sky color)
+    // The 0.2 multiplier is a heuristic to avoid double-counting reflection,
+    // since sky reflection is also partially accounted for in ambientSpecular above.
+    // For fully accurate PBR, this would use proper IBL (Image-Based Lighting) with
+    // Cook-Torrance BRDF, but that's expensive for real-time rendering.
     vec3 reflected = skyColor(reflect(-viewDir, normal));
     vec3 baseColor = mix(refracted, reflected, f);
     
     // Combine: base color (reflection/refraction) + ambient + diffuse + specular
-    // Base color contributes less since reflection is also in specular
+    // Base color contributes less since reflection is also partially in ambientSpecular
     vec3 color = baseColor * 0.2 + ambient + diffuse + specular;
     
     // Sparkles are now integrated into BRDF via dynamic roughness
