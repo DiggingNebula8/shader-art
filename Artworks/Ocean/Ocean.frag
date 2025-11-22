@@ -92,7 +92,9 @@ vec3 gerstnerWave(vec2 pos, vec2 dir, float amplitude, float frequency, float sp
     float c = cos(phase);
     
     // Horizontal displacement (choppy waves)
-    float q = steepness / (k * amplitude * float(NUM_WAVES));
+    // Standard Gerstner: q = steepness / (k * amplitude)
+    // Each wave's steepness is independent of total wave count
+    float q = steepness / (k * amplitude);
     vec2 displacement = dir * q * amplitude * c;
     
     // Vertical displacement
@@ -110,13 +112,14 @@ vec3 getWaveDisplacement(vec2 pos, float time) {
         float w = getWaveSpeed(k);
         
         // Steepness varies by wave - primary swell is gentler, detail waves are choppier
+        // Values adjusted for standard Gerstner formulation (independent of NUM_WAVES)
         float steepness;
-        if (i == 0) steepness = 0.3;      // Primary swell - gentle
-        else if (i == 1) steepness = 0.4; // Secondary swell
-        else if (i == 2) steepness = 0.45;// Tertiary swell
-        else if (i == 3) steepness = 0.5; // Cross swell
-        else if (i == 4) steepness = 0.6; // Detail wave 1 - choppier
-        else steepness = 0.7;             // Detail wave 2 - choppiest
+        if (i == 0) steepness = 0.05;      // Primary swell - gentle
+        else if (i == 1) steepness = 0.07; // Secondary swell
+        else if (i == 2) steepness = 0.08;// Tertiary swell
+        else if (i == 3) steepness = 0.09; // Cross swell
+        else if (i == 4) steepness = 0.12; // Detail wave 1 - choppier
+        else steepness = 0.15;            // Detail wave 2 - choppiest
         
         displacement += gerstnerWave(pos, dir, waveAmps[i], k, w, time, steepness);
     }
