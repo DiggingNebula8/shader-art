@@ -52,6 +52,9 @@ vec3 baseWaterColor = vec3(0.0, 0.3, 0.5);
 vec3 shallowWaterColor = vec3(0.0, 0.5, 0.7);
 float shallowDepthRange = 2.0;
 
+// Ocean floor depth (Y coordinate of ocean floor, negative = below surface)
+const float oceanFloorDepth = -10.0;
+
 // Camera
 vec3 camPos = vec3(0.0, 3.0, 5.0);
 vec3 camLookAt = vec3(0.0, 0.0, 0.0);
@@ -195,10 +198,12 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient)
     // Reuse gradient from normal calculation for foam
     float foam = getFoam(pos.xz, time, gradient);
     
-    // Calculate depth below surface (Y-up convention: surface at getWaveHeight(), pos.y below is negative)
-    // Depth = distance from surface downward = getWaveHeight() - pos.y
+    // Calculate water depth: distance from surface to ocean floor
+    // Since pos is at the surface (pos.y ≈ getWaveHeight), we compute depth as:
+    // depth = surfaceHeight - oceanFloorDepth
+    // This gives us the actual water depth at this location
     float surfaceHeight = getWaveHeight(pos.xz, time);
-    float depth = max(0.0, surfaceHeight - pos.y);
+    float depth = max(0.0, surfaceHeight - oceanFloorDepth);
     float depthFactor = smoothstep(0.0, shallowDepthRange, depth);
     refracted = mix(shallowWaterColor, baseWaterColor, depthFactor);
     

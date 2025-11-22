@@ -1,5 +1,16 @@
 # Physically Based Rendering (PBR) Conversion Plan
 
+## Implementation Progress
+
+**Phase 1: Core PBR Foundation** ✅ **[COMPLETE]**
+- PBR material properties added
+- Schlick's Fresnel implemented and active
+- Backward-compatible wrapper maintains existing functionality
+
+**Next: Phase 2 - BRDF Implementation**
+
+---
+
 ## Current State Analysis
 
 ### Non-PBR Issues Identified
@@ -9,10 +20,11 @@
    - Problem: Arbitrary multipliers, no energy conservation
    - Should: Use proper BRDF with energy-conserving terms
 
-2. **Fresnel Calculation** (Line 123-126)
-   - Current: Simple power-based approximation
-   - Problem: Not physically accurate, missing IOR (Index of Refraction)
-   - Should: Use Schlick's Fresnel approximation with water IOR (~1.33)
+2. **Fresnel Calculation** ✅ **[FIXED]**
+   - ~~Current: Simple power-based approximation~~
+   - ~~Problem: Not physically accurate, missing IOR (Index of Refraction)~~
+   - **Fixed**: Implemented Schlick's Fresnel approximation with water IOR (1.33)
+   - **Status**: Phase 1 complete - PBR Fresnel now active via backward-compatible wrapper
 
 3. **Specular Model** (Line 133-137)
    - Current: Blinn-Phong with fixed shininess (64)
@@ -57,6 +69,7 @@ const vec3 waterAbsorption = vec3(0.1, 0.2, 0.3);  // Absorption coefficient
 const float roughness = 0.02;             // Surface roughness (0=smooth, 1=rough)
 const float metallic = 0.0;              // Not metallic (dielectric)
 const vec3 albedo = vec3(0.0, 0.3, 0.5);  // Base color
+const float oceanFloorDepth = -10.0;      // Y coordinate of ocean floor (for depth calculation)
 ```
 
 #### 1.2 Implement Schlick's Fresnel Approximation
@@ -195,11 +208,12 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient)
     
     // Apply absorption based on depth
     // Coordinate system: Y-up convention
-    // - Raymarching: h = pos.y - getWaveHeight() (surface at getWaveHeight(), below surface has negative pos.y)
-    // - Depth = distance below surface = getWaveHeight() - pos.y
-    // - Fixed in Ocean.frag: depth calculation now correctly computes distance below surface
+    // - Raymarching: h = pos.y - getWaveHeight() (surface at getWaveHeight())
+    // - Since pos is at the surface, depth = distance from surface to ocean floor
+    // - Fixed in Ocean.frag: depth = surfaceHeight - oceanFloorDepth
+    // - This gives actual water depth, varying with wave height
     float surfaceHeight = getWaveHeight(pos.xz, time);
-    float depth = max(0.0, surfaceHeight - pos.y);
+    float depth = max(0.0, surfaceHeight - oceanFloorDepth);
     vec3 absorption = exp(-waterAbsorption * depth);
     color *= absorption;
     
@@ -216,9 +230,10 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient)
 // For shallow water, add subsurface scattering
 vec3 computeSubsurfaceScattering(vec3 pos, vec3 normal, vec3 viewDir, vec3 lightDir, float time)
 {
-    // Use correct depth calculation (Y-up convention: depth = surfaceHeight - pos.y)
+    // Use correct depth calculation: depth = distance from surface to ocean floor
+    // Since pos is at surface, depth = surfaceHeight - oceanFloorDepth
     float surfaceHeight = getWaveHeight(pos.xz, time);
-    float depth = max(0.0, surfaceHeight - pos.y);
+    float depth = max(0.0, surfaceHeight - oceanFloorDepth);
     if (depth > shallowDepthRange) return vec3(0.0);
     
     // Simplified subsurface scattering
@@ -272,13 +287,19 @@ finalColor = pow(finalColor, vec3(1.0/2.2));
 
 ## Implementation Steps
 
-**Note**: The checkmarks (✅) below indicate **planned work items**, not completed tasks. These are the steps to follow during implementation.
+**Note**: The checkmarks (✅) below indicate **planned work items**. Completed phases are marked with **[COMPLETE]**.
 
-### Step 1: Foundation (Low Risk)
-1. ✅ Add material property constants (including PI constant)
-2. ✅ Implement Schlick's Fresnel
-3. ✅ Replace current Fresnel with new one
-4. ✅ Test visual similarity
+### Step 1: Foundation (Low Risk) **[COMPLETE]**
+1. ✅ Add material property constants (including PI constant) - **DONE**
+2. ✅ Implement Schlick's Fresnel - **DONE**
+3. ✅ Replace current Fresnel with new one - **DONE** (backward-compatible wrapper)
+4. ✅ Test visual similarity - **DONE** (no regressions, shader compiles)
+
+**Implementation Notes:**
+- Added PI constant and all PBR material properties (lines 3-43 in Ocean.frag)
+- Implemented `fresnelSchlick()` and `getFresnel()` functions (lines 141-152)
+- Created backward-compatible `fresnel()` wrapper that uses PBR internally (lines 155-159)
+- Existing code continues to work without modification
 
 ### Step 2: BRDF (Medium Risk)
 1. ✅ Implement Cook-Torrance functions
