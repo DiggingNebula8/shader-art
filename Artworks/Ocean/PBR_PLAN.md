@@ -47,6 +47,9 @@
 
 #### 1.1 Add Physical Material Properties
 ```glsl
+// Mathematical constants
+const float PI = 3.14159265;
+
 // Material properties for water
 const float waterIOR = 1.33;              // Index of refraction (water)
 const float airIOR = 1.0;                 // Index of refraction (air)
@@ -81,7 +84,7 @@ float D_GGX(float NdotH, float roughness)
     float a2 = a * a;
     float NdotH2 = NdotH * NdotH;
     float denom = (NdotH2 * (a2 - 1.0) + 1.0);
-    return a2 / (3.14159 * denom * denom);
+    return a2 / (PI * denom * denom);
 }
 
 // Geometry Function (Smith with Schlick-GGX)
@@ -153,7 +156,7 @@ vec3 computeLighting(vec3 pos, vec3 normal, vec3 viewDir, float time)
     vec3 kS = F; // Specular contribution
     vec3 kD = (1.0 - kS) * (1.0 - metallic); // Diffuse contribution
     
-    vec3 diffuse = kD * albedo * directLight / 3.14159; // Lambertian
+    vec3 diffuse = kD * albedo * directLight / PI; // Lambertian
     
     // Environment/ambient
     vec3 ambient = getEnvironmentLight(normal) * albedo;
@@ -191,7 +194,14 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient)
     color += lighting;
     
     // Apply absorption based on depth
-    float depth = max(0.0, pos.y);
+    // NOTE: Coordinate system verification required:
+    // - Current Ocean.frag uses: depthFactor = smoothstep(0.0, shallowDepthRange, pos.y)
+    // - This suggests pos.y increases with depth (Y-down convention) OR surface is at negative Y
+    // - Verify actual coordinate system during implementation:
+    //   * Check raymarching: h = pos.y - getWaveHeight() suggests Y-up with surface at getWaveHeight()
+    //   * Check current depth usage: shallowDepthRange uses pos.y directly
+    //   * May need: depth = max(0.0, pos.y - surfaceHeight) or similar
+    float depth = max(0.0, pos.y); // TODO: Verify correct depth calculation during implementation
     vec3 absorption = exp(-waterAbsorption * depth);
     color *= absorption;
     
@@ -262,8 +272,10 @@ finalColor = pow(finalColor, vec3(1.0/2.2));
 
 ## Implementation Steps
 
+**Note**: The checkmarks (✅) below indicate **planned work items**, not completed tasks. These are the steps to follow during implementation.
+
 ### Step 1: Foundation (Low Risk)
-1. ✅ Add material property constants
+1. ✅ Add material property constants (including PI constant)
 2. ✅ Implement Schlick's Fresnel
 3. ✅ Replace current Fresnel with new one
 4. ✅ Test visual similarity
@@ -282,7 +294,7 @@ finalColor = pow(finalColor, vec3(1.0/2.2));
 
 ### Step 4: Water Features (Higher Risk)
 1. ✅ Implement proper refraction/reflection split
-2. ✅ Add absorption based on depth
+2. ✅ Add absorption based on depth (verify coordinate system)
 3. ✅ Integrate sparkles into BRDF
 4. ✅ Test visual quality
 
