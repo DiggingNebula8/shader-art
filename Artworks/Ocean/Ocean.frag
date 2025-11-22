@@ -376,9 +376,8 @@ float getFoam(vec2 pos, vec3 normal, float time) {
 
 // --- Main Shading Function ---
 vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time) {
-    // Fresnel
+    // Fresnel - per-channel for energy conservation
     vec3 F = getFresnel(viewDir, normal);
-    float fresnelFactor = dot(F, vec3(1.0/3.0));
     
     // Depth calculation
     float depth = max(pos.y - oceanFloorDepth, 0.1);
@@ -403,8 +402,9 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time) {
     
     vec3 reflectedColor = skyColor(reflectedDir);
     
-    // Mix reflection and refraction based on Fresnel
-    vec3 baseColor = mix(refractedColor, reflectedColor, fresnelFactor);
+    // Mix reflection and refraction based on Fresnel (per-channel for energy conservation)
+    // Energy conservation: refracted * (1 - F) + reflected * F
+    vec3 baseColor = refractedColor * (1.0 - F) + reflectedColor * F;
     
     // Direct lighting
     vec3 lightDir = sunDir;
@@ -420,8 +420,8 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time) {
     // Ambient (simplified IBL)
     vec3 ambient = skyColor(normal) * 0.15;
     
-    // Combine (without specular initially - will be added after foam blending)
-    vec3 color = baseColor + subsurface + ambient;
+    // Build diffuse/volume term without specular
+    vec3 waterBase = baseColor + subsurface + ambient;
     
     // Foam - realistic appearance
     float foam = getFoam(pos.xz, normal, time);
@@ -431,12 +431,14 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time) {
     const float FOAM_OPACITY = 0.85;
     const float FOAM_SPECULAR_REDUCTION = 0.8;
     
-    // Blend foam: foam appears on top, mixing with water color
+    // Foam-blend the diffuse term with FOAM_COLOR
     float foamOpacity = foam * FOAM_OPACITY;
-    color = mix(color, FOAM_COLOR, foamOpacity);
+    vec3 color = mix(waterBase, FOAM_COLOR, foamOpacity);
     
-    // Add specular with foam attenuation (foam is more diffuse than water)
+    // Compute foam-attenuated specular (foam is more diffuse than water)
     vec3 foamSpecular = specular * (1.0 - foam * FOAM_SPECULAR_REDUCTION);
+    
+    // Add foamSpecular once to the foam-blended diffuse (no subtraction needed)
     color += foamSpecular;
     
     return color;
