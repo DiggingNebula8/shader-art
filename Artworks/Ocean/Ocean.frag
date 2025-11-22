@@ -67,7 +67,7 @@ float getWaveHeight(vec2 pos, float time)
 
 // Optimized: Returns wave gradient, avoiding redundant calculations
 // Only computes the 4 samples needed for gradient (center height not needed)
-vec2 getWaveHeightAndGradient(vec2 pos, float time)
+vec2 getWaveGradient(vec2 pos, float time)
 {
     float eps = normalEps;
     
@@ -88,7 +88,7 @@ vec2 getWaveHeightAndGradient(vec2 pos, float time)
 vec3 getNormalAndGradient(vec2 pos, float time, out vec2 gradient)
 {
     // Get wave gradient (only compute once)
-    vec2 grad = getWaveHeightAndGradient(pos, time);
+    vec2 grad = getWaveGradient(pos, time);
     
     // Compute ripple gradient with smaller epsilon for fine detail
     float rippleEps = normalEps * 0.5;
