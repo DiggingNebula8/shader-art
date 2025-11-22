@@ -2,179 +2,155 @@
 
 // Mathematical constants
 const float PI = 3.14159265;
+const float EPSILON = 0.0001;
 
-// Raymarching
-const int MAX_STEPS = 150;  // Increased for smoother results
-const float MIN_DIST = 0.001;  // Reduced for smoother intersections (was 0.01)
-const float MAX_DIST = 100.0;
+// Raymarching - High quality settings
+const int MAX_STEPS = 256;
+const float MIN_DIST = 0.0005;
+const float MAX_DIST = 200.0;
 
-// Wave settings - Realistic ocean wave parameters
-const int NUM_WAVES = 6;
-// Wave directions - more varied for natural appearance
+// Wave settings - Production quality ocean waves
+const int NUM_WAVES = 8;
 vec2 waveDirs[NUM_WAVES] = vec2[](
-    vec2(0.8, 0.6), vec2(-0.6, 0.8),    // Primary waves (larger)
-    vec2(0.9, -0.4), vec2(-0.7, -0.7),  // Secondary waves
-    vec2(0.5, 0.9), vec2(-0.9, 0.3)     // Detail waves
+    vec2(0.8, 0.6), vec2(-0.6, 0.8),
+    vec2(0.9, -0.4), vec2(-0.7, -0.7),
+    vec2(0.5, 0.9), vec2(-0.9, 0.3),
+    vec2(0.3, -0.95), vec2(-0.4, 0.9)
 );
-// Wave amplitudes - realistic falloff (larger waves have more energy)
-float waveAmps[NUM_WAVES] = float[](0.8, 0.5, 0.3, 0.2, 0.1, 0.05);
-// Wave frequencies - more realistic distribution
-float waveFreqs[NUM_WAVES] = float[](0.5, 0.7, 1.2, 1.8, 3.5, 6.0);
-// Wave speeds - related to frequency (deeper water: speed ~ sqrt(frequency))
-float waveSpeeds[NUM_WAVES] = float[](0.35, 0.42, 0.55, 0.67, 0.94, 1.27);
-float choppyStrength = 0.4;  // Slightly more choppy for realism
+float waveAmps[NUM_WAVES] = float[](1.0, 0.6, 0.4, 0.25, 0.15, 0.08, 0.04, 0.02);
+float waveFreqs[NUM_WAVES] = float[](0.4, 0.6, 1.0, 1.5, 2.5, 4.0, 7.0, 12.0);
+float waveSpeeds[NUM_WAVES] = float[](0.3, 0.37, 0.48, 0.59, 0.76, 0.96, 1.27, 1.65);
+float choppyStrength = 0.5;
 
 // Surface detail
-float normalEps = 0.05;  // Reduced for smoother normals (was 0.1)
-float rippleStrength = 0.2;
-float rippleFreq = 10.0;
+float normalEps = 0.02;
+float rippleStrength = 0.15;
+float rippleFreq = 15.0;
 
-// Lighting
-vec3 sunDirection = normalize(vec3(0.8, 1.0, 0.6));  // Sun direction (elevated, slightly forward)
-vec3 sunColor = vec3(1.2, 1.0, 0.8);  // Warm sunlight color
-float sunIntensity = 0.4;  // Sun intensity (adjusted for PBR + tone mapping - was 0.1, too dark)
+// Lighting - Production quality
+vec3 sunDirection = normalize(vec3(0.3, 0.8, 0.5));
+vec3 sunColor = vec3(1.0, 0.95, 0.9);
+float sunIntensity = 1.2;
 
 // PBR Material Properties
-const float waterIOR = 1.33;              // Index of refraction (water)
-const float airIOR = 1.0;                 // Index of refraction (air)
-// Compute F0 from IOR for physical accuracy: F0 = ((n1 - n2) / (n1 + n2))²
-// For water-air interface: F0 = ((1.33 - 1.0) / (1.33 + 1.0))² ≈ 0.0201
+const float waterIOR = 1.33;
+const float airIOR = 1.0;
 const vec3 F0_dielectric = vec3(pow((waterIOR - airIOR) / (waterIOR + airIOR), 2.0));
-const vec3 waterAbsorption = vec3(0.45, 0.03, 0.015);  // Absorption coefficient (red absorbs most, blue least)
-const float roughness = 0.02;             // Surface roughness (0=smooth, 1=rough)
-const float metallic = 0.0;               // Not metallic (dielectric)
-const vec3 albedo = vec3(0.0, 0.3, 0.5);  // Base color
+const vec3 waterAbsorption = vec3(0.8, 0.15, 0.05);  // Stronger absorption for realism
+const float roughness = 0.01;  // Very smooth water
+const float metallic = 0.0;
+const vec3 albedo = vec3(0.0, 0.25, 0.4);
 
 // Foam
-float foamSlopeMin = 0.5;
-float foamSlopeMax = 1.0;
-float foamIntensity = 0.7;
+float foamSlopeMin = 0.4;
+float foamSlopeMax = 0.9;
+float foamIntensity = 0.8;
 
 // Water Color
-vec3 baseWaterColor = vec3(0.0, 0.3, 0.5);
-vec3 shallowWaterColor = vec3(0.0, 0.5, 0.7);
-// Depth range: with oceanFloorDepth=-10.0 and wave heights ~±1.43, depth ranges ~8.5-11.5
-// Use wave height variation to create depth-based color transitions
-// Base depth (at mean wave height) and depth variation range
-const float baseDepth = 10.0;  // Approximate mean depth
-const float depthVariationRange = 3.0;  // Range of depth variation from waves
-
-// Ocean floor depth (Y coordinate of ocean floor, negative = below surface)
+vec3 baseWaterColor = vec3(0.0, 0.2, 0.4);
+vec3 shallowWaterColor = vec3(0.0, 0.4, 0.6);
+const float baseDepth = 10.0;
+const float depthVariationRange = 4.0;
 const float oceanFloorDepth = -10.0;
 
 // Camera
 vec3 camPos = vec3(0.0, 3.0, 5.0);
 vec3 camLookAt = vec3(0.0, 0.0, 0.0);
-float camFov = 1.5;
+float camFov = 1.2;
 
 // --- Noise Functions ---
 
-float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
-float noise(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); float a = hash(i); float b = hash(i + vec2(1, 0)); float c = hash(i + vec2(0, 1)); float d = hash(i + vec2(1, 1)); vec2 u = f*f*(3.0-2.0*f); return mix(a, b, u.x) + (c - a)*u.y*(1.0 - u.x) + (d - b)*u.x*u.y; }
-float fbm(vec2 p) { float t=0.0,a=0.5; for(int i=0;i<4;i++){t+=noise(p)*a;p*=2.0;a*=0.5;} return t; }
+float hash(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+}
+
+float noise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    float a = hash(i);
+    float b = hash(i + vec2(1, 0));
+    float c = hash(i + vec2(0, 1));
+    float d = hash(i + vec2(1, 1));
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+}
+
+float fbm(vec2 p) {
+    float t = 0.0;
+    float a = 0.5;
+    for (int i = 0; i < 5; i++) {
+        t += noise(p) * a;
+        p *= 2.0;
+        a *= 0.5;
+    }
+    return t;
+}
 
 // --- Ocean Functions ---
 
-float getWaveHeight(vec2 pos, float time)
-{
+float getWaveHeight(vec2 pos, float time) {
     float height = 0.0;
-    for (int i = 0; i < NUM_WAVES; i++)
-    {
+    for (int i = 0; i < NUM_WAVES; i++) {
         vec2 dir = normalize(waveDirs[i]);
-        vec2 displacedPos = pos + dir * (sin(dot(pos, dir)*waveFreqs[i] + time*waveSpeeds[i]) * waveAmps[i] * choppyStrength);
+        float phase = dot(pos, dir) * waveFreqs[i] + time * waveSpeeds[i];
+        vec2 displacedPos = pos + dir * (sin(phase) * waveAmps[i] * choppyStrength);
         height += waveAmps[i] * sin(dot(displacedPos, dir) * waveFreqs[i] + time * waveSpeeds[i]);
     }
     return height;
 }
 
-// Optimized: Returns wave gradient, avoiding redundant calculations
-// Only computes the 4 samples needed for gradient (center height not needed)
-vec2 getWaveGradient(vec2 pos, float time)
-{
+vec2 getWaveGradient(vec2 pos, float time) {
     float eps = normalEps;
-    
-    // Compute wave heights at 4 sample points for gradient calculation
     float hL = getWaveHeight(pos - vec2(eps, 0.0), time);
     float hR = getWaveHeight(pos + vec2(eps, 0.0), time);
     float hD = getWaveHeight(pos - vec2(0.0, eps), time);
     float hU = getWaveHeight(pos + vec2(0.0, eps), time);
-    
-    // Compute gradient from finite differences
-    vec2 grad = vec2(hR - hL, hU - hD) / (2.0 * eps);
-    
-    return grad;
+    return vec2(hR - hL, hU - hD) / (2.0 * eps);
 }
 
-// Optimized: computes normal and gradients (wave-only and combined) once
-// Returns normal and outputs gradients via out parameters for reuse
-// waveGradient: wave-only gradient (for foam - excludes ripple detail)
-// combinedGradient: wave + ripple gradient (for normal calculation)
-vec3 getNormalAndGradient(vec2 pos, float time, out vec2 waveGradient, out vec2 combinedGradient)
-{
-    // Get wave gradient (only compute once)
+vec3 getNormalAndGradient(vec2 pos, float time, out vec2 waveGradient, out vec2 combinedGradient) {
     vec2 grad = getWaveGradient(pos, time);
-    waveGradient = grad; // Store wave-only gradient for foam
+    waveGradient = grad;
     
-    // Compute ripple gradient with smaller epsilon for fine detail
-    float rippleEps = normalEps * 0.5;
-    float rippleL = fbm((pos - vec2(rippleEps, 0.0)) * rippleFreq + time*0.1) * rippleStrength;
-    float rippleR = fbm((pos + vec2(rippleEps, 0.0)) * rippleFreq + time*0.1) * rippleStrength;
-    float rippleD = fbm((pos - vec2(0.0, rippleEps)) * rippleFreq + time*0.1) * rippleStrength;
-    float rippleU = fbm((pos + vec2(0.0, rippleEps)) * rippleFreq + time*0.1) * rippleStrength;
+    float rippleEps = normalEps * 0.3;
+    float rippleL = fbm((pos - vec2(rippleEps, 0.0)) * rippleFreq + time * 0.15) * rippleStrength;
+    float rippleR = fbm((pos + vec2(rippleEps, 0.0)) * rippleFreq + time * 0.15) * rippleStrength;
+    float rippleD = fbm((pos - vec2(0.0, rippleEps)) * rippleFreq + time * 0.15) * rippleStrength;
+    float rippleU = fbm((pos + vec2(0.0, rippleEps)) * rippleFreq + time * 0.15) * rippleStrength;
     
     vec2 rippleGrad = vec2(rippleR - rippleL, rippleU - rippleD) / (2.0 * rippleEps);
-    grad += rippleGrad; // Combined gradient for normal
-
+    grad += rippleGrad;
+    
     combinedGradient = grad;
     return normalize(vec3(-grad.x, 1.0, -grad.y));
 }
 
-float animatedFoamNoise(vec2 p, float time)
-{
-    return fbm(p * 3.0 + vec2(time*0.2, time*0.1));
+float animatedFoamNoise(vec2 p, float time) {
+    return fbm(p * 4.0 + vec2(time * 0.3, time * 0.15));
 }
 
-// Optimized: Reuses gradient calculation from normal computation
-float getFoam(vec2 pos, float time, vec2 gradient)
-{
-    // Reuse the gradient passed from normal calculation
+float getFoam(vec2 pos, float time, vec2 gradient) {
     float slope = length(gradient);
-    
-    // Smoother foam transitions to avoid blockiness
     float foam = smoothstep(foamSlopeMin, foamSlopeMax, slope);
-    // Additional smoothing for noise mask
-    float noiseMask = smoothstep(0.3, 0.7, animatedFoamNoise(pos*2.0, time));
+    float noiseMask = smoothstep(0.4, 0.8, animatedFoamNoise(pos * 2.5, time));
     foam *= noiseMask;
-    // Smooth the final foam value to avoid hard edges
-    foam = smoothstep(0.0, 1.0, foam);
     return foam;
 }
 
 // PBR: Schlick's Fresnel Approximation
-vec3 fresnelSchlick(float cosTheta, vec3 F0)
-{
-    return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
+vec3 fresnelSchlick(float cosTheta, vec3 F0) {
+    return F0 + (1.0 - F0) * pow(max(1.0 - cosTheta, 0.0), 5.0);
 }
 
-// PBR: Physically-based Fresnel for water
-vec3 getFresnel(vec3 viewDir, vec3 normal)
-{
+vec3 getFresnel(vec3 viewDir, vec3 normal) {
     float cosTheta = max(dot(viewDir, normal), 0.0);
     return fresnelSchlick(cosTheta, F0_dielectric);
 }
 
-// Wrapper for backward compatibility (returns scalar average)
-float fresnel(vec3 viewDir, vec3 normal)
-{
-    vec3 F = getFresnel(viewDir, normal);
-    return dot(F, vec3(1.0/3.0)); // Return average for mixing
-}
-
 // PBR: Cook-Torrance BRDF Functions
-
-// Normal Distribution Function (GGX/Trowbridge-Reitz)
-float D_GGX(float NdotH, float roughness)
-{
+float D_GGX(float NdotH, float roughness) {
     float a = roughness * roughness;
     float a2 = a * a;
     float NdotH2 = NdotH * NdotH;
@@ -182,29 +158,23 @@ float D_GGX(float NdotH, float roughness)
     return a2 / (PI * denom * denom);
 }
 
-// Geometry Function (Smith with Schlick-GGX)
-float G_SchlickGGX(float NdotV, float roughness)
-{
+float G_SchlickGGX(float NdotV, float roughness) {
     float r = (roughness + 1.0);
     float k = (r * r) / 8.0;
     return NdotV / (NdotV * (1.0 - k) + k);
 }
 
-float G_Smith(float NdotV, float NdotL, float roughness)
-{
+float G_Smith(float NdotV, float NdotL, float roughness) {
     return G_SchlickGGX(NdotV, roughness) * G_SchlickGGX(NdotL, roughness);
 }
 
-// Cook-Torrance specular BRDF
-vec3 specularBRDF(vec3 normal, vec3 viewDir, vec3 lightDir, vec3 lightColor, float roughness)
-{
+vec3 specularBRDF(vec3 normal, vec3 viewDir, vec3 lightDir, vec3 lightColor, float roughness) {
     vec3 halfVec = normalize(viewDir + lightDir);
     float NdotV = max(dot(normal, viewDir), 0.0);
     float NdotL = max(dot(normal, lightDir), 0.0);
     float NdotH = max(dot(normal, halfVec), 0.0);
     float VdotH = max(dot(viewDir, halfVec), 0.0);
     
-    // Early exit if surface is facing away
     if (NdotL <= 0.0 || NdotV <= 0.0) return vec3(0.0);
     
     float D = D_GGX(NdotH, roughness);
@@ -212,215 +182,137 @@ vec3 specularBRDF(vec3 normal, vec3 viewDir, vec3 lightDir, vec3 lightColor, flo
     vec3 F = fresnelSchlick(VdotH, F0_dielectric);
     
     vec3 numerator = D * G * F;
-    float denominator = 4.0 * NdotV * NdotL + 0.001; // Avoid division by zero
+    float denominator = 4.0 * NdotV * NdotL + EPSILON;
     
     return (numerator / denominator) * lightColor * NdotL;
 }
 
-vec3 skyColor(vec3 dir)
-{
-    return mix(vec3(0.6, 0.7, 0.9), vec3(0.1, 0.3, 0.6), dir.y * 0.5 + 0.5);
+vec3 skyColor(vec3 dir) {
+    float sunDot = max(dot(dir, sunDirection), 0.0);
+    vec3 skyBase = mix(vec3(0.5, 0.7, 1.0), vec3(0.1, 0.2, 0.4), dir.y * 0.5 + 0.5);
+    vec3 sunGlow = sunColor * pow(sunDot, 64.0) * 2.0;
+    return skyBase + sunGlow;
 }
 
-// PBR: Environment-based ambient lighting with Fresnel weighting
-// Returns both diffuse and specular ambient components for energy conservation
-void getEnvironmentLight(vec3 normal, vec3 viewDir, vec3 F, out vec3 ambientDiffuse, out vec3 ambientSpecular)
-{
-    // Diffuse ambient: sample sky color in the direction of the normal (hemisphere sampling)
-    // Bias towards upward direction for more realistic ambient
+void getEnvironmentLight(vec3 normal, vec3 viewDir, vec3 F, out vec3 ambientDiffuse, out vec3 ambientSpecular) {
     vec3 skyDirDiffuse = normalize(normal + vec3(0.0, 1.0, 0.0));
-    vec3 skyColorDiffuse = skyColor(skyDirDiffuse) * 0.25; // Scale down for ambient contribution (balanced with sun)
+    vec3 skyColorDiffuse = skyColor(skyDirDiffuse) * 0.2;
     
-    // Specular ambient: sample sky color in the reflection direction
-    // This accounts for environment reflection at grazing angles (where Fresnel is high)
     vec3 reflectedDir = reflect(-viewDir, normal);
-    vec3 skyColorSpecular = skyColor(reflectedDir) * 0.25; // Balanced with sun intensity
+    vec3 skyColorSpecular = skyColor(reflectedDir) * 0.3;
     
-    // Energy-conserving split: kD for diffuse, F (Fresnel) for specular
     vec3 kD = (1.0 - F) * (1.0 - metallic);
     ambientDiffuse = skyColorDiffuse * albedo * kD;
     ambientSpecular = skyColorSpecular * F;
 }
 
-// PBR: Tone mapping (Reinhard)
-// Maps HDR colors to LDR display range while preserving detail
-vec3 toneMapReinhard(vec3 color)
-{
+vec3 toneMapReinhard(vec3 color) {
     return color / (color + vec3(1.0));
 }
 
-// PBR: Gamma correction
-vec3 gammaCorrect(vec3 color, float gamma)
-{
+vec3 gammaCorrect(vec3 color, float gamma) {
     return pow(max(color, vec3(0.0)), vec3(1.0 / gamma));
 }
 
-float sparkleNoise(vec2 p, float time)
-{
-    return fract(sin(dot(p * 50.0 + time * 2.0, vec2(12.9898,78.233))) * 43758.5453);
+float sparkleNoise(vec2 p, float time) {
+    return fract(sin(dot(p * 60.0 + time * 3.0, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
-// PBR: Integrate sparkles into BRDF by modifying roughness
-// Sparkles occur where surface is smoother (lower roughness)
-float getRoughnessWithSparkles(vec2 worldPos, float time, float baseRoughness)
-{
+float getRoughnessWithSparkles(vec2 worldPos, float time, float baseRoughness) {
     float sparkleMask = sparkleNoise(worldPos, time);
-    // Reduce roughness where sparkles occur (smoother surface = brighter highlights)
-    // Only apply sparkle roughness reduction where noise is high
-    float sparkleFactor = smoothstep(0.6, 1.0, sparkleMask);
-    return mix(baseRoughness, baseRoughness * 0.1, sparkleFactor * 0.5);
+    float sparkleFactor = smoothstep(0.7, 1.0, sparkleMask);
+    return mix(baseRoughness, baseRoughness * 0.05, sparkleFactor * 0.6);
 }
 
-// Legacy sparkle function (kept for reference, but sparkles now integrated into BRDF)
-float computeSparkles(vec3 normal, vec3 viewDir, vec2 worldPos, float time)
-{
-    // viewDir is surface → camera, sunDirection is surface → light
-    // Half vector: H = normalize(L + V) for Blinn-Phong
-    vec3 halfVec = normalize(sunDirection + viewDir);
-    float ndoth = max(dot(normal, halfVec), 0.0);
-    float sparkleBase = pow(ndoth, 256.0);
-    float noiseMask = sparkleNoise(worldPos, time);
-    return sparkleBase * smoothstep(0.5, 1.0, noiseMask);
-}
-
-vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient)
-{
-    // viewDir is now surface → camera (corrected convention)
-    
-    // PBR: Compute Fresnel for energy conservation
+vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient) {
     vec3 F = getFresnel(viewDir, normal);
-    float f = dot(F, vec3(1.0/3.0)); // Scalar Fresnel for reflection/refraction mixing
+    float f = dot(F, vec3(1.0/3.0));
     
-    // Use wave-only gradient for foam (excludes ripple detail to avoid foam on small ripples)
     float foam = getFoam(pos.xz, time, gradient);
     
-    // Calculate water depth: distance from surface to ocean floor
-    // Since pos is at the surface (pos.y ≈ getWaveHeight), we compute depth as:
-    // depth = surfaceHeight - oceanFloorDepth
-    // This gives us the actual water depth at this location
     float surfaceHeight = getWaveHeight(pos.xz, time);
-    float depth = surfaceHeight - oceanFloorDepth;
+    float depth = max(surfaceHeight - oceanFloorDepth, 0.1);
     
-    // Create depth-based color variation using wave height variation
-    // Normalize depth relative to base depth, then use variation range for transition
-    // This creates shallow color in wave troughs (lower surface = shallower) and deep color in peaks
-    // Use smoothstep for smooth transitions to avoid blockiness
-    float depthOffset = depth - baseDepth;  // Offset from mean depth
+    float depthOffset = depth - baseDepth;
     float depthFactor = smoothstep(-depthVariationRange * 0.5, depthVariationRange * 0.5, depthOffset);
     vec3 waterColor = mix(shallowWaterColor, baseWaterColor, depthFactor);
     
-    // Apply absorption to refracted light (what you see through the water)
-    // Absorption affects the water color based on depth
-    vec3 absorption = exp(-waterAbsorption * max(depth, 0.1)); // Clamp depth to avoid division issues
+    vec3 absorption = exp(-waterAbsorption * depth);
     vec3 refracted = waterColor * absorption;
     
-    // REALISTIC OCEAN: Water is mostly reflection/refraction, not diffuse
-    // Reflection: sky and environment (dominant at grazing angles due to Fresnel)
     vec3 reflected = skyColor(reflect(-viewDir, normal));
-    
-    // Mix reflection and refraction based on Fresnel
-    // At perpendicular angles (low Fresnel): mostly refraction (see through water)
-    // At grazing angles (high Fresnel): mostly reflection (mirror-like)
     vec3 baseColor = mix(refracted, reflected, f);
     
-    // PBR: Cook-Torrance lighting for sun highlights
     vec3 lightDir = sunDirection;
     vec3 lightColor = sunColor * sunIntensity;
     
     float NdotL = max(dot(normal, lightDir), 0.0);
-    
-    // PBR: Dynamic roughness with sparkles integrated
-    // Sparkles occur where surface is smoother (lower roughness)
     float dynamicRoughness = getRoughnessWithSparkles(pos.xz, time, roughness);
-    
-    // Specular (Cook-Torrance BRDF with sparkle-integrated roughness)
-    // This handles the sun's reflection on the water surface
     vec3 specular = specularBRDF(normal, viewDir, lightDir, lightColor, dynamicRoughness);
     
-    // Water has minimal diffuse scattering - most light is reflected or refracted
-    // Use very small diffuse contribution for subtle subsurface scattering effect
-    vec3 kS = F; // Specular contribution from Fresnel
-    vec3 kD = (1.0 - kS) * (1.0 - metallic) * 0.1; // Water has very low diffuse (10% of normal)
+    vec3 kS = F;
+    vec3 kD = (1.0 - kS) * (1.0 - metallic) * 0.05;
     vec3 diffuse = kD * albedo * lightColor * NdotL / PI;
     
-    // PBR: Environment-based ambient with Fresnel weighting
-    // Split into diffuse and specular components for energy conservation
     vec3 ambientDiffuse, ambientSpecular;
     getEnvironmentLight(normal, viewDir, F, ambientDiffuse, ambientSpecular);
     vec3 ambient = ambientDiffuse + ambientSpecular;
     
-    // REALISTIC OCEAN LIGHTING MODEL:
-    // Water is primarily reflection/refraction (baseColor), with specular highlights from sun
-    // Diffuse and ambient are minimal - water is mostly specular
-    vec3 color = baseColor + specular + diffuse * 0.3 + ambient * 0.5;
+    vec3 color = baseColor + specular + diffuse + ambient * 0.6;
     
-    // Sparkles are now integrated into BRDF via dynamic roughness
-    // Optional: Add subtle extra sparkle highlights for visual enhancement
-    // (reduced intensity since sparkles are already in specular)
-    float sparkleHighlight = computeSparkles(normal, viewDir, pos.xz, time);
-    color += sparkleHighlight * vec3(0.2, 0.18, 0.15); // Subtle enhancement
-    
-    // Foam overlay (foam is white and opaque)
     color = mix(color, vec3(1.0), foam * foamIntensity);
     
-    // PBR: Energy conservation - clamp to reasonable HDR range
-    color = min(color, vec3(10.0)); // Max 10x brightness (HDR)
-    
-    // PBR: Tone mapping (Reinhard) - maps HDR to LDR
+    color = min(color, vec3(20.0));
     color = toneMapReinhard(color);
-    
-    // PBR: Gamma correction for display
     color = gammaCorrect(color, 2.2);
     
     return color;
 }
 
-vec3 raymarchOcean(vec3 ro, vec3 rd, float time)
-{
+vec3 raymarchOcean(vec3 ro, vec3 rd, float time) {
     float t = 0.0;
+    float lastH = 1e20;
     
-    for (int i = 0; i < MAX_STEPS; i++)
-    {
+    for (int i = 0; i < MAX_STEPS; i++) {
         vec3 pos = ro + rd * t;
         float h = pos.y - getWaveHeight(pos.xz, time);
         
-        // Smooth intersection - reduced threshold for smoother results
         if (abs(h) < MIN_DIST) {
-            return pos;  // Return current position (already smooth with smaller MIN_DIST)
+            return pos;
         }
         
         if (t > MAX_DIST) break;
         
-        // Adaptive step size - smaller steps for smoother raymarching
-        // Reduced multiplier and tighter clamping to prevent blocky artifacts
-        float stepSize = clamp(h * 0.25, 0.005, 0.4);  // More conservative stepping
+        float stepSize = clamp(h * 0.3, MIN_DIST * 2.0, 0.5);
         t += stepSize;
+        
+        if (abs(h - lastH) < EPSILON && h > MIN_DIST * 5.0) break;
+        lastH = h;
     }
+    
     return ro + rd * MAX_DIST;
 }
 
-void mainImage(out vec4 fragColor, in vec2 fragCoord)
-{
-    vec2 uv = (fragCoord - 0.5*iResolution.xy) / iResolution.y;
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+    vec2 uv = (fragCoord - 0.5 * iResolution.xy) / iResolution.y;
     
     vec3 forward = normalize(camLookAt - camPos);
-    vec3 right = normalize(cross(vec3(0.0,1.0,0.0), forward));
+    vec3 right = normalize(cross(vec3(0.0, 1.0, 0.0), forward));
     vec3 up = cross(forward, right);
-    vec3 rd = normalize(uv.x*right + uv.y*up + camFov*forward);
+    vec3 rd = normalize(uv.x * right + uv.y * up + camFov * forward);
     
     vec3 pos = raymarchOcean(camPos, rd, iTime);
     
-    // Compute normal and gradients together (optimized - only compute once)
+    if (length(pos - camPos) > MAX_DIST * 0.99) {
+        fragColor = vec4(skyColor(rd), 1.0);
+        return;
+    }
+    
     vec2 pos2d = pos.xz;
     vec2 waveGrad, combinedGrad;
     vec3 normal = getNormalAndGradient(pos2d, iTime, waveGrad, combinedGrad);
-
-    // Convert ray direction (camera → surface) to view direction (surface → camera)
-    // Fresnel and specular functions expect surface → camera direction
-    vec3 viewDir = -rd;
     
-    // Use wave-only gradient for foam (excludes ripple detail)
-    // Use combined gradient for normal (includes ripple detail for shading)
+    vec3 viewDir = -rd;
     vec3 color = shadeOcean(pos, normal, viewDir, iTime, waveGrad);
     
     fragColor = vec4(color, 1.0);
