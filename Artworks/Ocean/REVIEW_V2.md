@@ -11,7 +11,30 @@ All previously identified issues have been resolved:
 
 ## New Issues Found
 
-### 1. Unused Variables: `waterIOR` and `airIOR` (Lines 34-35)
+### 1. ⚠️ **Water Absorption Physics Error** (Line 36)
+**Problem**: The `waterAbsorption` coefficients are inverted, causing deep water to appear reddish instead of blue.
+```glsl
+const vec3 waterAbsorption = vec3(0.1, 0.2, 0.3);  // Absorption coefficient
+```
+
+**Physics Explanation**:
+- In real water, red light is absorbed more strongly than blue light
+- The formula `exp(-waterAbsorption * depth)` means higher coefficients → more absorption
+- Current values `vec3(0.1, 0.2, 0.3)` preserve red (low absorption) and absorb blue (high absorption)
+- This is backwards: deep water appears reddish when it should appear bluish
+
+**Correct Values**: Should be approximately `vec3(0.3, 0.2, 0.1)` or similar, where:
+- Red channel has highest absorption (0.3)
+- Green channel has medium absorption (0.2)  
+- Blue channel has lowest absorption (0.1)
+
+**Impact**: Significant visual/physics error affecting the realism of deep water rendering.
+
+**Fix**: Reverse the coefficients to match real water absorption properties.
+
+---
+
+### 2. Unused Variables: `waterIOR` and `airIOR` (Lines 34-35)
 **Problem**: Index of refraction constants are defined but never used.
 ```glsl
 const float waterIOR = 1.33;  // Index of refraction (water)
@@ -25,7 +48,7 @@ const float airIOR = 1.0;     // Index of refraction (air)
 
 ---
 
-### 2. Unused Function: `fresnel()` wrapper (Lines 155-160)
+### 3. Unused Function: `fresnel()` wrapper (Lines 155-160)
 **Problem**: Function is defined but never called.
 ```glsl
 // Wrapper for backward compatibility (returns scalar average)
@@ -41,7 +64,7 @@ float fresnel(vec3 viewDir, vec3 normal)
 
 ---
 
-### 3. Redundant Color Definitions
+### 4. Redundant Color Definitions
 **Observation**: `baseWaterColor` and `albedo` have identical values:
 ```glsl
 const vec3 albedo = vec3(0.0, 0.3, 0.5);  // Base color
@@ -57,7 +80,7 @@ vec3 baseWaterColor = vec3(0.0, 0.3, 0.5);
 
 ## Potential Design Issues
 
-### 4. Mixed Lighting Models
+### 5. Mixed Lighting Models
 **Observation**: The shader mixes two lighting approaches:
 1. **Cook-Torrance BRDF** for direct sun lighting (fully PBR)
 2. **Simple Fresnel-based environment reflection** for sky (not fully PBR)
@@ -136,12 +159,15 @@ vec3 color = baseColor * 0.2 + ambient + diffuse + specular;
 
 ## Summary
 
-**Critical Issues**: 0  
+**Critical Issues**: 1 (water absorption physics error)  
 **Minor Issues**: 3 (unused code)  
 **Design Observations**: 1 (mixed lighting models - acceptable)
 
-**Overall Assessment**: ✅ **The shader is in excellent shape!**
+**Overall Assessment**: ⚠️ **The shader is mostly excellent, but has a significant physics error.**
 
-The code is mathematically correct, well-structured, and follows PBR principles. The remaining issues are minor (unused code) and don't affect functionality. The mixed lighting model is a reasonable design choice for real-time rendering.
+The code is mathematically correct, well-structured, and follows PBR principles. However, the inverted water absorption coefficients cause deep water to appear reddish instead of blue, which is a significant visual/physics error. The remaining issues are minor (unused code) and don't affect functionality. The mixed lighting model is a reasonable design choice for real-time rendering.
 
-**Recommendation**: Remove unused code (`waterIOR`, `airIOR`, `fresnel()` wrapper) unless planning to use them, and optionally document the `baseColor` weighting rationale.
+**Recommendation**: 
+1. **Fix the water absorption coefficients** (reverse RGB values to `vec3(0.3, 0.2, 0.1)` or similar)
+2. Remove unused code (`waterIOR`, `airIOR`, `fresnel()` wrapper) unless planning to use them
+3. Optionally document the `baseColor` weighting rationale
