@@ -33,7 +33,7 @@ float sunIntensity = .1;
 // PBR Material Properties
 const float waterIOR = 1.33;              // Index of refraction (water)
 const float airIOR = 1.0;                 // Index of refraction (air)
-const vec3 waterAbsorption = vec3(0.1, 0.2, 0.3);  // Absorption coefficient
+const vec3 waterAbsorption = vec3(0.45, 0.03, 0.015);  // Absorption coefficient (red absorbs most, blue least)
 const float roughness = 0.02;             // Surface roughness (0=smooth, 1=rough)
 const float metallic = 0.0;               // Not metallic (dielectric)
 const vec3 albedo = vec3(0.0, 0.3, 0.5);  // Base color
