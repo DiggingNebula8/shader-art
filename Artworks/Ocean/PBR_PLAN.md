@@ -194,14 +194,12 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient)
     color += lighting;
     
     // Apply absorption based on depth
-    // NOTE: Coordinate system verification required:
-    // - Current Ocean.frag uses: depthFactor = smoothstep(0.0, shallowDepthRange, pos.y)
-    // - This suggests pos.y increases with depth (Y-down convention) OR surface is at negative Y
-    // - Verify actual coordinate system during implementation:
-    //   * Check raymarching: h = pos.y - getWaveHeight() suggests Y-up with surface at getWaveHeight()
-    //   * Check current depth usage: shallowDepthRange uses pos.y directly
-    //   * May need: depth = max(0.0, pos.y - surfaceHeight) or similar
-    float depth = max(0.0, pos.y); // TODO: Verify correct depth calculation during implementation
+    // Coordinate system: Y-up convention
+    // - Raymarching: h = pos.y - getWaveHeight() (surface at getWaveHeight(), below surface has negative pos.y)
+    // - Depth = distance below surface = getWaveHeight() - pos.y
+    // - Fixed in Ocean.frag: depth calculation now correctly computes distance below surface
+    float surfaceHeight = getWaveHeight(pos.xz, time);
+    float depth = max(0.0, surfaceHeight - pos.y);
     vec3 absorption = exp(-waterAbsorption * depth);
     color *= absorption;
     
@@ -294,7 +292,8 @@ finalColor = pow(finalColor, vec3(1.0/2.2));
 
 ### Step 4: Water Features (Higher Risk)
 1. ✅ Implement proper refraction/reflection split
-2. ✅ Add absorption based on depth (verify coordinate system)
+2. ✅ Add absorption based on depth
+   - **FIXED**: Coordinate system bug resolved in Ocean.frag (depth = surfaceHeight - pos.y)
 3. ✅ Integrate sparkles into BRDF
 4. ✅ Test visual quality
 

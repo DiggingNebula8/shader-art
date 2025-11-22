@@ -162,7 +162,11 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient)
     // Reuse gradient from normal calculation for foam
     float foam = getFoam(pos.xz, time, gradient);
     
-    float depthFactor = smoothstep(0.0, shallowDepthRange, pos.y);
+    // Calculate depth below surface (Y-up convention: surface at getWaveHeight(), pos.y below is negative)
+    // Depth = distance from surface downward = getWaveHeight() - pos.y
+    float surfaceHeight = getWaveHeight(pos.xz, time);
+    float depth = max(0.0, surfaceHeight - pos.y);
+    float depthFactor = smoothstep(0.0, shallowDepthRange, depth);
     refracted = mix(shallowWaterColor, baseWaterColor, depthFactor);
     
     vec3 color = mix(refracted, reflected, f);
