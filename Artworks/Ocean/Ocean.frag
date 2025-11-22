@@ -26,12 +26,9 @@ float rippleStrength = 0.2;
 float rippleFreq = 10.0;
 
 // Lighting
-vec3 ambientLightColor = vec3(0.05, 0.1, 0.2);
 vec3 sunDirection = normalize(vec3(0.8, 1.0, 0.6));
 vec3 sunColor = vec3(1.2, 1.0, 0.8);
 float sunIntensity = .1;
-float fresnelPower = 5.0; // Legacy - will be replaced by PBR Fresnel
-float refractionStrength = 0.5;
 
 // PBR Material Properties
 const float waterIOR = 1.33;              // Index of refraction (water)
@@ -142,12 +139,6 @@ float getFoam(vec2 pos, float time, vec2 gradient)
     return foam;
 }
 
-// Legacy Fresnel (kept for reference, will be replaced)
-float fresnel_legacy(vec3 viewDir, vec3 normal)
-{
-    return pow(1.0 - max(dot(viewDir, normal), 0.0), fresnelPower);
-}
-
 // PBR: Schlick's Fresnel Approximation
 vec3 fresnelSchlick(float cosTheta, vec3 F0)
 {
@@ -243,14 +234,6 @@ vec3 gammaCorrect(vec3 color, float gamma)
     return pow(max(color, vec3(0.0)), vec3(1.0 / gamma));
 }
 
-float sunSpecular(vec3 normal, vec3 viewDir)
-{
-    // viewDir is surface → camera, sunDirection is surface → light
-    // Half vector: H = normalize(L + V) for Blinn-Phong
-    vec3 halfVec = normalize(sunDirection + viewDir);
-    return pow(max(dot(normal, halfVec), 0.0), 64.0);
-}
-
 float sparkleNoise(vec2 p, float time)
 {
     return fract(sin(dot(p * 50.0 + time * 2.0, vec2(12.9898,78.233))) * 43758.5453);
@@ -299,7 +282,7 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient)
     
     // Create depth-based color variation using wave height variation
     // Normalize depth relative to base depth, then use variation range for transition
-    // This creates shallow color in wave troughs (lower surface = deeper) and deep color in peaks
+    // This creates shallow color in wave troughs (lower surface = shallower) and deep color in peaks
     float depthOffset = depth - baseDepth;  // Offset from mean depth
     float depthFactor = smoothstep(-depthVariationRange * 0.5, depthVariationRange * 0.5, depthOffset);
     refracted = mix(shallowWaterColor, baseWaterColor, depthFactor);
@@ -332,7 +315,8 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient)
     // Reflection/refraction contribution (integrated into BRDF)
     // Reflection is already handled by specular BRDF, refraction contributes to base color
     // Mix reflection and refraction based on Fresnel
-    vec3 reflected = skyColor(reflect(viewDir, normal));
+    // reflect() expects incident direction (toward surface), but viewDir is surface → camera
+    vec3 reflected = skyColor(reflect(-viewDir, normal));
     vec3 baseColor = mix(refracted, reflected, f);
     
     // Combine: base color (reflection/refraction) + ambient + diffuse + specular
