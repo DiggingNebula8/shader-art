@@ -1,5 +1,8 @@
 // --- Parameters ---
 
+// Mathematical constants
+const float PI = 3.14159265;
+
 // Raymarching
 const int MAX_STEPS = 100;
 const float MIN_DIST = 0.01;
@@ -27,8 +30,17 @@ vec3 ambientLightColor = vec3(0.05, 0.1, 0.2);
 vec3 sunDirection = normalize(vec3(0.8, 1.0, 0.6));
 vec3 sunColor = vec3(1.2, 1.0, 0.8);
 float sunIntensity = .1;
-float fresnelPower = 5.0;
+float fresnelPower = 5.0; // Legacy - will be replaced by PBR Fresnel
 float refractionStrength = 0.5;
+
+// PBR Material Properties
+const float waterIOR = 1.33;              // Index of refraction (water)
+const float airIOR = 1.0;                 // Index of refraction (air)
+const vec3 waterAbsorption = vec3(0.1, 0.2, 0.3);  // Absorption coefficient
+const float roughness = 0.02;             // Surface roughness (0=smooth, 1=rough)
+const float metallic = 0.0;               // Not metallic (dielectric)
+const vec3 albedo = vec3(0.0, 0.3, 0.5);  // Base color
+const vec3 F0_dielectric = vec3(0.02);    // Fresnel F0 for dielectrics (water)
 
 // Foam
 float foamSlopeMin = 0.5;
@@ -120,9 +132,30 @@ float getFoam(vec2 pos, float time, vec2 gradient)
     return foam;
 }
 
-float fresnel(vec3 viewDir, vec3 normal)
+// Legacy Fresnel (kept for reference, will be replaced)
+float fresnel_legacy(vec3 viewDir, vec3 normal)
 {
     return pow(1.0 - max(dot(viewDir, normal), 0.0), fresnelPower);
+}
+
+// PBR: Schlick's Fresnel Approximation
+vec3 fresnelSchlick(float cosTheta, vec3 F0)
+{
+    return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
+}
+
+// PBR: Physically-based Fresnel for water
+vec3 getFresnel(vec3 viewDir, vec3 normal)
+{
+    float cosTheta = max(dot(viewDir, normal), 0.0);
+    return fresnelSchlick(cosTheta, F0_dielectric);
+}
+
+// Wrapper for backward compatibility (returns scalar average)
+float fresnel(vec3 viewDir, vec3 normal)
+{
+    vec3 F = getFresnel(viewDir, normal);
+    return dot(F, vec3(1.0/3.0)); // Return average for mixing
 }
 
 vec3 skyColor(vec3 dir)
