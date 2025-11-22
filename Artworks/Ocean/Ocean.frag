@@ -50,7 +50,11 @@ float foamIntensity = 0.7;
 // Water Color
 vec3 baseWaterColor = vec3(0.0, 0.3, 0.5);
 vec3 shallowWaterColor = vec3(0.0, 0.5, 0.7);
-float shallowDepthRange = 2.0;
+// Depth range: with oceanFloorDepth=-10.0 and wave heights ~±1.43, depth ranges ~8.5-11.5
+// Use wave height variation to create depth-based color transitions
+// Base depth (at mean wave height) and depth variation range
+const float baseDepth = 10.0;  // Approximate mean depth
+const float depthVariationRange = 3.0;  // Range of depth variation from waves
 
 // Ocean floor depth (Y coordinate of ocean floor, negative = below surface)
 const float oceanFloorDepth = -10.0;
@@ -98,12 +102,15 @@ vec2 getWaveGradient(vec2 pos, float time)
     return grad;
 }
 
-// Optimized: computes normal and combined gradient (wave + ripple) once
-// Returns normal and outputs gradient via out parameter for reuse
-vec3 getNormalAndGradient(vec2 pos, float time, out vec2 gradient)
+// Optimized: computes normal and gradients (wave-only and combined) once
+// Returns normal and outputs gradients via out parameters for reuse
+// waveGradient: wave-only gradient (for foam - excludes ripple detail)
+// combinedGradient: wave + ripple gradient (for normal calculation)
+vec3 getNormalAndGradient(vec2 pos, float time, out vec2 waveGradient, out vec2 combinedGradient)
 {
     // Get wave gradient (only compute once)
     vec2 grad = getWaveGradient(pos, time);
+    waveGradient = grad; // Store wave-only gradient for foam
     
     // Compute ripple gradient with smaller epsilon for fine detail
     float rippleEps = normalEps * 0.5;
@@ -113,9 +120,9 @@ vec3 getNormalAndGradient(vec2 pos, float time, out vec2 gradient)
     float rippleU = fbm((pos + vec2(0.0, rippleEps)) * rippleFreq + time*0.1) * rippleStrength;
     
     vec2 rippleGrad = vec2(rippleR - rippleL, rippleU - rippleD) / (2.0 * rippleEps);
-    grad += rippleGrad;
+    grad += rippleGrad; // Combined gradient for normal
 
-    gradient = grad;
+    combinedGradient = grad;
     return normalize(vec3(-grad.x, 1.0, -grad.y));
 }
 
@@ -200,7 +207,7 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient)
     vec3 sunLight = sunColor * sunDiffuse * sunIntensity;
     
     float f = fresnel(viewDir, normal);
-    // Reuse gradient from normal calculation for foam
+    // Use wave-only gradient for foam (excludes ripple detail to avoid foam on small ripples)
     float foam = getFoam(pos.xz, time, gradient);
     
     // Calculate water depth: distance from surface to ocean floor
@@ -208,8 +215,13 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient)
     // depth = surfaceHeight - oceanFloorDepth
     // This gives us the actual water depth at this location
     float surfaceHeight = getWaveHeight(pos.xz, time);
-    float depth = max(0.0, surfaceHeight - oceanFloorDepth);
-    float depthFactor = smoothstep(0.0, shallowDepthRange, depth);
+    float depth = surfaceHeight - oceanFloorDepth;
+    
+    // Create depth-based color variation using wave height variation
+    // Normalize depth relative to base depth, then use variation range for transition
+    // This creates shallow color in wave troughs (lower surface = deeper) and deep color in peaks
+    float depthOffset = depth - baseDepth;  // Offset from mean depth
+    float depthFactor = smoothstep(-depthVariationRange * 0.5, depthVariationRange * 0.5, depthOffset);
     refracted = mix(shallowWaterColor, baseWaterColor, depthFactor);
     
     vec3 color = mix(refracted, reflected, f);
@@ -249,17 +261,18 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
     
     vec3 pos = raymarchOcean(camPos, rd, iTime);
     
-    // Compute normal and gradient together (optimized - only compute once)
+    // Compute normal and gradients together (optimized - only compute once)
     vec2 pos2d = pos.xz;
-    vec2 grad;
-    vec3 normal = getNormalAndGradient(pos2d, iTime, grad);
+    vec2 waveGrad, combinedGrad;
+    vec3 normal = getNormalAndGradient(pos2d, iTime, waveGrad, combinedGrad);
 
     // Convert ray direction (camera → surface) to view direction (surface → camera)
     // Fresnel and specular functions expect surface → camera direction
     vec3 viewDir = -rd;
     
-    // Reuse gradient for foam calculation
-    vec3 color = shadeOcean(pos, normal, viewDir, iTime, grad);
+    // Use wave-only gradient for foam (excludes ripple detail)
+    // Use combined gradient for normal (includes ripple detail for shading)
+    vec3 color = shadeOcean(pos, normal, viewDir, iTime, waveGrad);
     
     fragColor = vec4(color, 1.0);
 }
