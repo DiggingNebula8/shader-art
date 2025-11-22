@@ -191,7 +191,7 @@ vec3 specularBRDF(vec3 normal, vec3 viewDir, vec3 lightDir, vec3 lightColor, flo
     float G = G_Smith(NdotV, NdotL, roughness);
     vec3 F = fresnelSchlick(VdotH, F0_WATER);
     
-    vec3 numerator = D * G * F;
+    vec3 numerator = (D * G) * F;
     float denominator = 4.0 * NdotV * NdotL + EPSILON;
     
     return (numerator / denominator) * lightColor * NdotL;
@@ -210,7 +210,7 @@ vec3 skyColor(vec3 dir) {
 vec3 getSubsurfaceScattering(vec3 normal, vec3 viewDir, vec3 lightDir, float depth) {
     vec3 backLight = -lightDir;
     float scatter = max(dot(normal, backLight), 0.0);
-    float attenuation = exp(-waterAbsorption * depth);
+    vec3 attenuation = exp(-waterAbsorption * depth);
     return shallowWaterColor * scatter * attenuation * 0.3;
 }
 
