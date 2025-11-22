@@ -92,7 +92,9 @@ vec3 gerstnerWave(vec2 pos, vec2 dir, float amplitude, float frequency, float sp
     float c = cos(phase);
     
     // Horizontal displacement (choppy waves)
-    // Standard Gerstner: q = steepness / (k * amplitude)
+    // Normalize steepness by wave parameters to make it dimensionless
+    // Standard Gerstner uses Q directly; we divide by (k * amplitude) so
+    // the input 'steepness' values (0.05-0.15) produce Q values in valid range
     // Each wave's steepness is independent of total wave count
     float q = steepness / (k * amplitude);
     vec2 displacement = dir * q * amplitude * c;
@@ -132,13 +134,35 @@ float getWaveHeight(vec2 pos, float time) {
     return disp.y;
 }
 
+// Compute wave height and gradient analytically (much faster than finite differences)
+// Returns vec3(height, grad.x, grad.y)
+// For Gerstner waves: h = amplitude * sin(phase), so ∂h/∂pos = amplitude * k * dir * cos(phase)
+vec3 getWaveHeightAndGradient(vec2 pos, float time) {
+    float height = 0.0;
+    vec2 grad = vec2(0.0);
+    
+    for (int i = 0; i < NUM_WAVES; i++) {
+        vec2 dir = getWaveDir(i);
+        float k = waveFreqs[i];
+        float w = getWaveSpeed(k);
+        float phase = dot(pos, dir) * k + time * w;
+        float s = sin(phase);
+        float c = cos(phase);
+        float A = waveAmps[i];
+        
+        // Height: sum of vertical displacements
+        height += A * s;
+        
+        // Analytical gradient: ∂h/∂pos = amplitude * k * dir * cos(phase)
+        grad += A * k * dir * c;
+    }
+    
+    return vec3(height, grad.x, grad.y);
+}
+
 vec2 getWaveGradient(vec2 pos, float time) {
-    float eps = 0.01;
-    float hL = getWaveHeight(pos - vec2(eps, 0.0), time);
-    float hR = getWaveHeight(pos + vec2(eps, 0.0), time);
-    float hD = getWaveHeight(pos - vec2(0.0, eps), time);
-    float hU = getWaveHeight(pos + vec2(0.0, eps), time);
-    return vec2(hR - hL, hU - hD) / (2.0 * eps);
+    vec3 hg = getWaveHeightAndGradient(pos, time);
+    return hg.yz; // Return gradient components
 }
 
 vec3 getNormal(vec2 pos, float time, out vec2 gradient) {
@@ -472,7 +496,14 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     
     // Camera setup
     vec3 forward = normalize(camLookAt - camPos);
-    vec3 right = normalize(cross(vec3(0.0, 1.0, 0.0), forward));
+    vec3 worldUp = vec3(0.0, 1.0, 0.0);
+    vec3 right = cross(worldUp, forward);
+    // Handle degenerate case (looking straight up/down)
+    if (length(right) < 0.001) {
+        right = vec3(1.0, 0.0, 0.0);  // Fallback to x-axis
+    } else {
+        right = normalize(right);
+    }
     vec3 up = cross(forward, right);
     vec3 rd = normalize(uv.x * right + uv.y * up + camFov * forward);
     
