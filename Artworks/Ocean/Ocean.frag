@@ -168,7 +168,9 @@ vec3 skyColor(vec3 dir)
 
 float sunSpecular(vec3 normal, vec3 viewDir)
 {
-    vec3 halfVec = normalize(sunDirection - viewDir);
+    // viewDir is surface → camera, sunDirection is surface → light
+    // Half vector: H = normalize(L + V) for Blinn-Phong
+    vec3 halfVec = normalize(sunDirection + viewDir);
     return pow(max(dot(normal, halfVec), 0.0), 64.0);
 }
 
@@ -179,7 +181,9 @@ float sparkleNoise(vec2 p, float time)
 
 float computeSparkles(vec3 normal, vec3 viewDir, vec2 worldPos, float time)
 {
-    vec3 halfVec = normalize(sunDirection - viewDir);
+    // viewDir is surface → camera, sunDirection is surface → light
+    // Half vector: H = normalize(L + V) for Blinn-Phong
+    vec3 halfVec = normalize(sunDirection + viewDir);
     float ndoth = max(dot(normal, halfVec), 0.0);
     float sparkleBase = pow(ndoth, 256.0);
     float noiseMask = sparkleNoise(worldPos, time);
@@ -188,7 +192,8 @@ float computeSparkles(vec3 normal, vec3 viewDir, vec2 worldPos, float time)
 
 vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient)
 {
-    vec3 reflected = skyColor(reflect(-viewDir, normal));
+    // viewDir is now surface → camera (corrected convention)
+    vec3 reflected = skyColor(reflect(viewDir, normal));
     vec3 refracted = baseWaterColor;
     
     float sunDiffuse = max(dot(normal, sunDirection), 0.0);
@@ -249,8 +254,12 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
     vec2 grad;
     vec3 normal = getNormalAndGradient(pos2d, iTime, grad);
 
+    // Convert ray direction (camera → surface) to view direction (surface → camera)
+    // Fresnel and specular functions expect surface → camera direction
+    vec3 viewDir = -rd;
+    
     // Reuse gradient for foam calculation
-    vec3 color = shadeOcean(pos, normal, rd, iTime, grad);
+    vec3 color = shadeOcean(pos, normal, viewDir, iTime, grad);
     
     fragColor = vec4(color, 1.0);
 }
