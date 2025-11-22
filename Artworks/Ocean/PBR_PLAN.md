@@ -214,9 +214,11 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient)
 #### 3.2 Subsurface Scattering (Optional - Advanced)
 ```glsl
 // For shallow water, add subsurface scattering
-vec3 computeSubsurfaceScattering(vec3 pos, vec3 normal, vec3 viewDir, vec3 lightDir)
+vec3 computeSubsurfaceScattering(vec3 pos, vec3 normal, vec3 viewDir, vec3 lightDir, float time)
 {
-    float depth = max(0.0, pos.y);
+    // Use correct depth calculation (Y-up convention: depth = surfaceHeight - pos.y)
+    float surfaceHeight = getWaveHeight(pos.xz, time);
+    float depth = max(0.0, surfaceHeight - pos.y);
     if (depth > shallowDepthRange) return vec3(0.0);
     
     // Simplified subsurface scattering
