@@ -18,31 +18,49 @@ const float WATER_IOR = 1.33;
 const float AIR_IOR = 1.0;
 const vec3 F0_WATER = vec3(0.02);
 
-// Wave Parameters - Based on oceanographic data
-const int NUM_WAVES = 12;
-// Wave directions (normalized)
-vec2 waveDirs[NUM_WAVES] = vec2[](
-    vec2(1.0, 0.0), vec2(0.866, 0.5), vec2(0.5, 0.866),
-    vec2(0.0, 1.0), vec2(-0.5, 0.866), vec2(-0.866, 0.5),
-    vec2(-1.0, 0.0), vec2(-0.866, -0.5), vec2(-0.5, -0.866),
-    vec2(0.0, -1.0), vec2(0.5, -0.866), vec2(0.866, -0.5)
-);
+// Wave Parameters - Realistic ocean with dominant swell direction
+const int NUM_WAVES = 6;
 
-// Wave amplitudes (m) - realistic ocean spectrum
+// Primary swell direction (dominant wind direction) - pre-normalized
+// vec2(1.0, 0.3) normalized = approximately vec2(0.9578, 0.2873)
+const vec2 PRIMARY_SWELL_DIR = vec2(0.9578, 0.2873);
+
+// Get wave direction for a given wave index
+vec2 getWaveDir(int i) {
+    if (i == 0) return PRIMARY_SWELL_DIR;                                    // Primary swell
+    if (i == 1) return normalize(PRIMARY_SWELL_DIR + vec2(0.2, 0.1));       // Secondary swell
+    if (i == 2) return normalize(PRIMARY_SWELL_DIR + vec2(-0.15, 0.2));     // Tertiary swell
+    if (i == 3) return normalize(vec2(PRIMARY_SWELL_DIR.y, -PRIMARY_SWELL_DIR.x)); // Cross swell
+    if (i == 4) return normalize(PRIMARY_SWELL_DIR + vec2(0.1, -0.3));      // Detail wave 1
+    return normalize(PRIMARY_SWELL_DIR + vec2(-0.2, -0.1));                  // Detail wave 2
+}
+
+// Wave amplitudes (m) - primary swell dominates, others add detail
 float waveAmps[NUM_WAVES] = float[](
-    0.8, 0.6, 0.5, 0.4, 0.35, 0.3,
-    0.25, 0.2, 0.15, 0.12, 0.1, 0.08
+    1.2,  // Primary swell - largest
+    0.4,  // Secondary swell
+    0.25, // Tertiary swell
+    0.15, // Cross swell
+    0.08, // Detail wave 1
+    0.05  // Detail wave 2
 );
 
-// Wave frequencies (rad/m) - following dispersion relation
+// Wave frequencies (rad/m) - primary swell is longer wavelength
 float waveFreqs[NUM_WAVES] = float[](
-    0.3, 0.4, 0.5, 0.6, 0.75, 0.9,
-    1.1, 1.3, 1.6, 2.0, 2.5, 3.2
+    0.15, // Primary swell - long wavelength
+    0.25, // Secondary swell
+    0.4,  // Tertiary swell
+    0.6,  // Cross swell
+    1.2,  // Detail wave 1
+    2.0   // Detail wave 2
 );
 
 // Wave speeds computed from dispersion: w = sqrt(g*k) for deep water
+// Time scaling factor to slow down wave motion for more realistic appearance
+const float TIME_SCALE = 0.3; // Slower, more contemplative motion
+
 float getWaveSpeed(float k) {
-    return sqrt(GRAVITY * k);
+    return sqrt(GRAVITY * k) * TIME_SCALE;
 }
 
 // Lighting
@@ -88,12 +106,21 @@ vec3 gerstnerWave(vec2 pos, vec2 dir, float amplitude, float frequency, float sp
 
 vec3 getWaveDisplacement(vec2 pos, float time) {
     vec3 displacement = vec3(0.0);
-    float steepness = 0.5; // Wave steepness parameter
     
     for (int i = 0; i < NUM_WAVES; i++) {
-        vec2 dir = normalize(waveDirs[i]);
+        vec2 dir = getWaveDir(i);
         float k = waveFreqs[i];
         float w = getWaveSpeed(k);
+        
+        // Steepness varies by wave - primary swell is gentler, detail waves are choppier
+        float steepness;
+        if (i == 0) steepness = 0.3;      // Primary swell - gentle
+        else if (i == 1) steepness = 0.4; // Secondary swell
+        else if (i == 2) steepness = 0.45;// Tertiary swell
+        else if (i == 3) steepness = 0.5; // Cross swell
+        else if (i == 4) steepness = 0.6; // Detail wave 1 - choppier
+        else steepness = 0.7;             // Detail wave 2 - choppiest
+        
         displacement += gerstnerWave(pos, dir, waveAmps[i], k, w, time, steepness);
     }
     
@@ -215,14 +242,46 @@ vec3 getSubsurfaceScattering(vec3 normal, vec3 viewDir, vec3 lightDir, float dep
 }
 
 // --- Foam ---
+// Realistic foam based on wave physics: steepness, curvature, and crests
 float getFoam(vec2 pos, vec3 normal, float time) {
+    // Wave gradient for steepness
     vec2 grad = getWaveGradient(pos, time);
     float slope = length(grad);
-    float foam = smoothstep(0.3, 0.7, slope);
     
-    // Add noise for foam variation
-    float foamNoise = fbm(pos * 5.0 + time * 0.5, 3);
-    foam *= smoothstep(0.4, 0.7, foamNoise);
+    // Wave height to identify crests
+    float height = getWaveHeight(pos, time);
+    
+    // Curvature calculation (Laplacian approximation) - waves break where curvature is high
+    // More efficient: compute Laplacian using height differences
+    float eps = 0.08;
+    float h0 = getWaveHeight(pos, time);
+    float hL = getWaveHeight(pos - vec2(eps, 0.0), time);
+    float hR = getWaveHeight(pos + vec2(eps, 0.0), time);
+    float hD = getWaveHeight(pos - vec2(0.0, eps), time);
+    float hU = getWaveHeight(pos + vec2(0.0, eps), time);
+    
+    // Laplacian: second derivative approximation
+    float curvature = abs((hL + hR + hD + hU - 4.0 * h0) / (eps * eps));
+    
+    // Foam appears where:
+    // 1. Waves are steep (slope > threshold)
+    // 2. Waves are breaking (high curvature)
+    // 3. At wave crests (positive height)
+    
+    float steepnessFoam = smoothstep(0.4, 0.8, slope);
+    float curvatureFoam = smoothstep(0.3, 0.6, curvature);
+    float crestFoam = smoothstep(-0.1, 0.3, height); // Foam at crests
+    
+    // Combine foam factors - all contribute
+    float foam = steepnessFoam * 0.5 + curvatureFoam * 0.3 + crestFoam * 0.2;
+    
+    // Add subtle wave-based variation (not noise texture)
+    // Use wave height pattern itself for organic variation
+    float wavePattern = sin(dot(pos, vec2(0.7, 0.3)) * 2.0 + time * 0.5) * 0.5 + 0.5;
+    foam *= (0.7 + 0.3 * wavePattern); // Subtle variation, not dominant
+    
+    // Smooth transitions
+    foam = smoothstep(0.2, 0.6, foam);
     
     return foam;
 }
@@ -268,9 +327,22 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time) {
     // Combine
     vec3 color = baseColor + specular + subsurface + ambient;
     
-    // Foam
+    // Foam - realistic appearance
     float foam = getFoam(pos.xz, normal, time);
-    color = mix(color, vec3(1.0), foam * 0.7);
+    
+    // Foam color: slightly off-white with subtle blue tint
+    vec3 foamColor = vec3(0.95, 0.98, 1.0);
+    
+    // Foam reduces specular (foam is more diffuse than water)
+    vec3 foamSpecular = specular * (1.0 - foam * 0.8);
+    
+    // Blend foam: foam appears on top, mixing with water color
+    // Use smooth blending - foam is semi-transparent
+    float foamOpacity = foam * 0.85;
+    color = mix(color, foamColor, foamOpacity);
+    
+    // Reduce specular where foam is present
+    color = color - specular + foamSpecular;
     
     return color;
 }
