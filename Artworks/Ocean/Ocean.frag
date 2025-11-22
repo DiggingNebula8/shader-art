@@ -420,8 +420,8 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time) {
     // Ambient (simplified IBL)
     vec3 ambient = skyColor(normal) * 0.15;
     
-    // Combine
-    vec3 color = baseColor + specular + subsurface + ambient;
+    // Combine (without specular initially - will be added after foam blending)
+    vec3 color = baseColor + subsurface + ambient;
     
     // Foam - realistic appearance
     float foam = getFoam(pos.xz, normal, time);
@@ -431,15 +431,13 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time) {
     const float FOAM_OPACITY = 0.85;
     const float FOAM_SPECULAR_REDUCTION = 0.8;
     
-    // Foam reduces specular (foam is more diffuse than water)
-    vec3 foamSpecular = specular * (1.0 - foam * FOAM_SPECULAR_REDUCTION);
-    
     // Blend foam: foam appears on top, mixing with water color
     float foamOpacity = foam * FOAM_OPACITY;
     color = mix(color, FOAM_COLOR, foamOpacity);
     
-    // Reduce specular where foam is present
-    color = color - specular + foamSpecular;
+    // Add specular with foam attenuation (foam is more diffuse than water)
+    vec3 foamSpecular = specular * (1.0 - foam * FOAM_SPECULAR_REDUCTION);
+    color += foamSpecular;
     
     return color;
 }
