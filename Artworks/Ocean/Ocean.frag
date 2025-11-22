@@ -200,7 +200,7 @@ float computeSparkles(vec3 normal, vec3 viewDir, vec2 worldPos, float time)
 vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient)
 {
     // viewDir is now surface → camera (corrected convention)
-    vec3 reflected = skyColor(reflect(viewDir, normal));
+    vec3 reflected = skyColor(reflect(-viewDir, normal));
     vec3 refracted = baseWaterColor;
     
     float sunDiffuse = max(dot(normal, sunDirection), 0.0);
