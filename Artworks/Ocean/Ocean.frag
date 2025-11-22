@@ -141,8 +141,9 @@ vec2 getWaveGradient(vec2 pos, float time) {
     return vec2(hR - hL, hU - hD) / (2.0 * eps);
 }
 
-vec3 getNormal(vec2 pos, float time) {
+vec3 getNormal(vec2 pos, float time, out vec2 gradient) {
     vec2 grad = getWaveGradient(pos, time);
+    gradient = grad;
     return normalize(vec3(-grad.x, 1.0, -grad.y));
 }
 
@@ -330,9 +331,9 @@ vec3 getSubsurfaceScattering(vec3 normal, vec3 viewDir, vec3 lightDir, float dep
 
 // --- Foam ---
 // Realistic foam based on wave physics: steepness, curvature, and crests
-float getFoam(vec2 pos, vec3 normal, float time) {
-    // Wave gradient for steepness
-    vec2 grad = getWaveGradient(pos, time);
+float getFoam(vec2 pos, vec3 normal, float time, vec2 gradient) {
+    // Wave gradient for steepness (passed as parameter to avoid redundant computation)
+    vec2 grad = gradient;
     float slope = length(grad);
     
     // Wave height to identify crests (cache for reuse)
@@ -375,7 +376,7 @@ float getFoam(vec2 pos, vec3 normal, float time) {
 }
 
 // --- Main Shading Function ---
-vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time) {
+vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient) {
     // Fresnel - per-channel for energy conservation
     vec3 F = getFresnel(viewDir, normal);
     
@@ -423,8 +424,8 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time) {
     // Build diffuse/volume term without specular
     vec3 waterBase = baseColor + subsurface + ambient;
     
-    // Foam - realistic appearance
-    float foam = getFoam(pos.xz, normal, time);
+    // Foam - realistic appearance (gradient passed to avoid redundant computation)
+    float foam = getFoam(pos.xz, normal, time, gradient);
     
     // Foam appearance
     const vec3 FOAM_COLOR = vec3(0.95, 0.98, 1.0); // Slightly off-white with subtle blue tint
@@ -484,12 +485,13 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
         return;
     }
     
-    // Compute normal
-    vec3 normal = getNormal(pos.xz, iTime);
+    // Compute normal (gradient computed here and passed through to avoid redundant computation)
+    vec2 gradient;
+    vec3 normal = getNormal(pos.xz, iTime, gradient);
     vec3 viewDir = -rd;
     
     // Shade
-    vec3 color = shadeOcean(pos, normal, viewDir, iTime);
+    vec3 color = shadeOcean(pos, normal, viewDir, iTime, gradient);
     
     // Tone mapping
     color = color / (color + vec3(1.0));
