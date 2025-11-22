@@ -65,31 +65,30 @@ float getWaveHeight(vec2 pos, float time)
     return height;
 }
 
-// Optimized: Returns both wave height and gradient, avoiding redundant calculations
-vec3 getWaveHeightAndGradient(vec2 pos, float time)
+// Optimized: Returns wave gradient, avoiding redundant calculations
+// Only computes the 4 samples needed for gradient (center height not needed)
+vec2 getWaveHeightAndGradient(vec2 pos, float time)
 {
     float eps = normalEps;
     
-    // Compute wave heights at 4 sample points (reused for both height and gradient)
+    // Compute wave heights at 4 sample points for gradient calculation
     float hL = getWaveHeight(pos - vec2(eps, 0.0), time);
     float hR = getWaveHeight(pos + vec2(eps, 0.0), time);
     float hD = getWaveHeight(pos - vec2(0.0, eps), time);
     float hU = getWaveHeight(pos + vec2(0.0, eps), time);
-    float hC = getWaveHeight(pos, time); // Center height
     
     // Compute gradient from finite differences
     vec2 grad = vec2(hR - hL, hU - hD) / (2.0 * eps);
     
-    // Return: x = gradient.x, y = gradient.y, z = center height
-    return vec3(grad, hC);
+    return grad;
 }
 
-// Optimized: Returns both normal and combined gradient (wave + ripple) to avoid redundant calculations
-vec4 getNormalAndGradient(vec2 pos, float time)
+// Optimized: computes normal and combined gradient (wave + ripple) once
+// Returns normal and outputs gradient via out parameter for reuse
+vec3 getNormalAndGradient(vec2 pos, float time, out vec2 gradient)
 {
     // Get wave gradient (only compute once)
-    vec3 waveData = getWaveHeightAndGradient(pos, time);
-    vec2 grad = waveData.xy;
+    vec2 grad = getWaveHeightAndGradient(pos, time);
     
     // Compute ripple gradient with smaller epsilon for fine detail
     float rippleEps = normalEps * 0.5;
@@ -98,15 +97,11 @@ vec4 getNormalAndGradient(vec2 pos, float time)
     float rippleD = fbm((pos - vec2(0.0, rippleEps)) * rippleFreq + time*0.1) * rippleStrength;
     float rippleU = fbm((pos + vec2(0.0, rippleEps)) * rippleFreq + time*0.1) * rippleStrength;
     
-    // Combine wave and ripple gradients
     vec2 rippleGrad = vec2(rippleR - rippleL, rippleU - rippleD) / (2.0 * rippleEps);
     grad += rippleGrad;
-    
-    // Compute normal from combined gradient
-    vec3 normal = normalize(vec3(-grad.x, 1.0, -grad.y));
-    
-    // Return: xyz = normal, w unused (gradient stored separately)
-    return vec4(normal, 0.0);
+
+    gradient = grad;
+    return normalize(vec3(-grad.x, 1.0, -grad.y));
 }
 
 float animatedFoamNoise(vec2 p, float time)
@@ -209,23 +204,9 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
     
     // Compute normal and gradient together (optimized - only compute once)
     vec2 pos2d = pos.xz;
-    
-    // Get wave gradient
-    vec3 waveData = getWaveHeightAndGradient(pos2d, iTime);
-    vec2 grad = waveData.xy;
-    
-    // Add ripple gradient
-    float rippleEps = normalEps * 0.5;
-    float rippleL = fbm((pos2d - vec2(rippleEps, 0.0)) * rippleFreq + iTime*0.1) * rippleStrength;
-    float rippleR = fbm((pos2d + vec2(rippleEps, 0.0)) * rippleFreq + iTime*0.1) * rippleStrength;
-    float rippleD = fbm((pos2d - vec2(0.0, rippleEps)) * rippleFreq + iTime*0.1) * rippleStrength;
-    float rippleU = fbm((pos2d + vec2(0.0, rippleEps)) * rippleFreq + iTime*0.1) * rippleStrength;
-    vec2 rippleGrad = vec2(rippleR - rippleL, rippleU - rippleD) / (2.0 * rippleEps);
-    grad += rippleGrad;
-    
-    // Compute normal from combined gradient
-    vec3 normal = normalize(vec3(-grad.x, 1.0, -grad.y));
-    
+    vec2 grad;
+    vec3 normal = getNormalAndGradient(pos2d, iTime, grad);
+
     // Reuse gradient for foam calculation
     vec3 color = shadeOcean(pos, normal, rd, iTime, grad);
     
