@@ -14,8 +14,6 @@ const float MAX_DIST = 150.0;
 
 // Physical Constants
 const float GRAVITY = 9.81;
-const float WATER_IOR = 1.33;
-const float AIR_IOR = 1.0;
 const vec3 F0_WATER = vec3(0.02);
 
 // Wave Parameters - Realistic ocean with dominant swell direction
@@ -63,25 +61,24 @@ float getWaveSpeed(float k) {
     return sqrt(GRAVITY * k) * TIME_SCALE;
 }
 
-// Lighting
-vec3 sunDir = normalize(vec3(0.2, 0.8, 0.4));
-vec3 sunColor = vec3(1.0, 0.98, 0.95);
-float sunIntensity = 2.5;
+// Lighting Configuration
+const vec3 sunDir = normalize(vec3(0.2, 0.8, 0.4));
+const vec3 sunColor = vec3(1.0, 0.98, 0.95);
+const float sunIntensity = 2.5;
 
 // Water Properties
 const vec3 waterAbsorption = vec3(0.15, 0.045, 0.015); // m^-1 (realistic values)
-const vec3 waterScattering = vec3(0.001, 0.001, 0.001);
 const float roughness = 0.005; // Very smooth ocean surface
 
-// Colors
-vec3 deepWaterColor = vec3(0.0, 0.15, 0.3);
-vec3 shallowWaterColor = vec3(0.0, 0.4, 0.6);
+// Water Colors
+const vec3 deepWaterColor = vec3(0.0, 0.15, 0.3);
+const vec3 shallowWaterColor = vec3(0.0, 0.4, 0.6);
 const float oceanFloorDepth = -15.0;
 
-// Camera
-vec3 camPos = vec3(0.0, 4.0, 8.0);
-vec3 camLookAt = vec3(0.0, 0.0, 0.0);
-float camFov = 1.0;
+// Camera Configuration
+const vec3 camPos = vec3(0.0, 4.0, 8.0);
+const vec3 camLookAt = vec3(0.0, 0.0, 0.0);
+const float camFov = 1.0;
 
 // --- Gerstner Wave Function ---
 // Based on: Tessendorf "Simulating Ocean Water"
@@ -146,34 +143,6 @@ vec3 getNormal(vec2 pos, float time) {
     return normalize(vec3(-grad.x, 1.0, -grad.y));
 }
 
-// --- Noise Functions ---
-float hash(vec2 p) {
-    p = fract(p * vec2(233.34, 851.73));
-    p += dot(p, p + 23.45);
-    return fract(p.x * p.y);
-}
-
-float noise(vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-    float a = hash(i);
-    float b = hash(i + vec2(1.0, 0.0));
-    float c = hash(i + vec2(0.0, 1.0));
-    float d = hash(i + vec2(1.0, 1.0));
-    vec2 u = f * f * (3.0 - 2.0 * f);
-    return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
-}
-
-float fbm(vec2 p, int octaves) {
-    float value = 0.0;
-    float amplitude = 0.5;
-    for (int i = 0; i < octaves; i++) {
-        value += noise(p) * amplitude;
-        p *= 2.0;
-        amplitude *= 0.5;
-    }
-    return value;
-}
 
 // --- Fresnel ---
 // Proper Fresnel calculation using IOR
@@ -224,12 +193,127 @@ vec3 specularBRDF(vec3 normal, vec3 viewDir, vec3 lightDir, vec3 lightColor, flo
     return (numerator / denominator) * lightColor * NdotL;
 }
 
-// --- Sky ---
+// --- Physically-Based Atmospheric Scattering ---
+// Based on: Preetham et al. "A Practical Analytic Model for Daylight"
+//          and Rayleigh/Mie scattering theory
+
+// Atmospheric Parameters
+const float RAYLEIGH_SCALE_HEIGHT = 8000.0; // meters
+const float MIE_SCALE_HEIGHT = 1200.0;     // meters
+
+// Scattering Coefficients (per meter)
+// Rayleigh: wavelength-dependent, blue scatters more (Red, Green, Blue)
+const vec3 BETA_R = vec3(5.8e-6, 13.5e-6, 33.1e-6) * 0.8;
+// Mie: wavelength-independent (aerosols) - less than Rayleigh for clear sky
+const float BETA_M = 4e-6;
+
+// Scattering phase functions
+// Rayleigh: symmetric, peaks at 90 degrees
+float rayleighPhase(float cosTheta) {
+    return 3.0 / (16.0 * PI) * (1.0 + cosTheta * cosTheta);
+}
+
+// Mie: forward scattering (Henyey-Greenstein approximation)
+float miePhase(float cosTheta, float g) {
+    float g2 = g * g;
+    return (1.0 - g2) / (4.0 * PI * pow(1.0 + g2 - 2.0 * g * cosTheta, 1.5));
+}
+
+// Calculate optical depth through atmosphere
+// Simplified model: optical depth increases as elevation decreases
+// (more atmosphere to travel through near horizon)
+float getOpticalDepth(vec3 dir, float scaleHeight) {
+    float elevation = max(dir.y, 0.01);
+    // Inverse relationship: lower elevation = more atmosphere = higher optical depth
+    return scaleHeight / elevation;
+}
+
+// Physically-based sky color with atmospheric scattering
 vec3 skyColor(vec3 dir) {
-    float sunDot = max(dot(dir, sunDir), 0.0);
-    vec3 sky = mix(vec3(0.4, 0.6, 1.0), vec3(0.1, 0.2, 0.4), dir.y * 0.5 + 0.5);
-    vec3 sun = sunColor * pow(sunDot, 128.0) * 3.0;
-    return sky + sun;
+    // Clamp direction to prevent sampling below horizon
+    vec3 safeDir = normalize(vec3(dir.x, max(dir.y, 0.01), dir.z));
+    
+    float sunDot = max(dot(safeDir, sunDir), 0.0);
+    float sunElevation = max(sunDir.y, 0.01);
+    
+    // Elevation angle (0 = horizon, 1 = zenith)
+    float elevation = safeDir.y;
+    
+    // Optical depth - how much atmosphere light travels through
+    float rayleighDepth = getOpticalDepth(safeDir, RAYLEIGH_SCALE_HEIGHT);
+    float mieDepth = getOpticalDepth(safeDir, MIE_SCALE_HEIGHT);
+    float sunRayleighDepth = getOpticalDepth(sunDir, RAYLEIGH_SCALE_HEIGHT);
+    float sunMieDepth = getOpticalDepth(sunDir, MIE_SCALE_HEIGHT);
+    
+    // Transmittance (Beer's law) - how much light survives
+    vec3 rayleighTransmittance = exp(-BETA_R * rayleighDepth);
+    float mieTransmittance = exp(-BETA_M * mieDepth);
+    
+    // Sun transmittance (for in-scattering)
+    vec3 sunRayleighTransmittance = exp(-BETA_R * sunRayleighDepth);
+    float sunMieTransmittance = exp(-BETA_M * sunMieDepth);
+    
+    // Scattering phase functions
+    const float MIE_G = 0.76; // Asymmetry parameter (forward scattering)
+    float rayleighPhaseValue = rayleighPhase(sunDot);
+    float miePhaseValue = miePhase(sunDot, MIE_G);
+    
+    // In-scattering: light from sun scattered toward viewer
+    vec3 rayleighInScatter = BETA_R * rayleighPhaseValue * sunRayleighTransmittance;
+    float mieInScatter = BETA_M * miePhaseValue * sunMieTransmittance;
+    
+    // Sky color from scattered sunlight
+    vec3 sky = (rayleighInScatter + vec3(mieInScatter)) * sunColor * sunIntensity * 2.0;
+    
+    // Add ambient sky light (scattered from all directions)
+    vec3 ambientSky = BETA_R * 0.5 * (1.0 - rayleighTransmittance);
+    sky += ambientSky;
+    
+    // Horizon glow: more scattering near horizon creates warm glow
+    const vec3 HORIZON_GLOW_COLOR = vec3(1.0, 0.75, 0.6); // Warm sunset colors
+    const float HORIZON_GLOW_INTENSITY = 0.4;
+    float horizonFactor = pow(max(0.0, 1.0 - elevation), 1.5);
+    float horizonIntensity = horizonFactor * (1.0 - rayleighTransmittance.r) * HORIZON_GLOW_INTENSITY;
+    sky += HORIZON_GLOW_COLOR * horizonIntensity;
+    
+    // Apply transmittance for distance
+    sky *= mix(vec3(1.0), rayleighTransmittance * mieTransmittance, 0.7);
+    
+    // Sun disk - bright when looking directly at sun
+    const float SUN_ANGULAR_SIZE = 0.0093; // ~0.53 degrees in radians
+    const float SUN_DISK_BRIGHTNESS = 30.0;
+    const float SUN_HALO_POWER = 16.0;
+    const float SUN_HALO_INTENSITY = 3.0;
+    const float SUNSET_ELEVATION_THRESHOLD = 0.4;
+    const vec3 SUNSET_COLOR = vec3(1.0, 0.6, 0.3);
+    
+    float sunAngle = acos(clamp(sunDot, 0.0, 1.0));
+    float sunDisk = 1.0 - smoothstep(0.0, SUN_ANGULAR_SIZE, sunAngle);
+    
+    // Sun color varies with elevation (redder at horizon due to more scattering)
+    vec3 sunDiskColor = sunColor;
+    if (sunElevation < SUNSET_ELEVATION_THRESHOLD) {
+        // Sunset/sunrise: redder sun (more atmosphere = more red scattering)
+        float sunsetFactor = smoothstep(SUNSET_ELEVATION_THRESHOLD, 0.1, sunElevation);
+        sunDiskColor = mix(sunColor, SUNSET_COLOR, sunsetFactor);
+    }
+    
+    // Sun disk brightness
+    vec3 sun = sunDiskColor * sunDisk * SUN_DISK_BRIGHTNESS * sunIntensity;
+    
+    // Mie scattering creates bright halo around sun (atmospheric glow)
+    float sunHalo = pow(max(0.0, sunDot), SUN_HALO_POWER);
+    float haloIntensity = (1.0 - elevation * 0.3) * (1.0 - sunMieTransmittance);
+    vec3 halo = sunDiskColor * sunHalo * haloIntensity * SUN_HALO_INTENSITY * sunIntensity;
+    
+    // Combine all components
+    vec3 finalSky = sky + sun + halo;
+    
+    // Ensure minimum brightness (never completely black)
+    const vec3 MIN_SKY_BRIGHTNESS = vec3(0.02, 0.05, 0.1);
+    finalSky = max(finalSky, MIN_SKY_BRIGHTNESS);
+    
+    return finalSky;
 }
 
 // --- Subsurface Scattering ---
@@ -248,20 +332,18 @@ float getFoam(vec2 pos, vec3 normal, float time) {
     vec2 grad = getWaveGradient(pos, time);
     float slope = length(grad);
     
-    // Wave height to identify crests
+    // Wave height to identify crests (cache for reuse)
     float height = getWaveHeight(pos, time);
     
     // Curvature calculation (Laplacian approximation) - waves break where curvature is high
-    // More efficient: compute Laplacian using height differences
-    float eps = 0.08;
-    float h0 = getWaveHeight(pos, time);
+    const float eps = 0.08;
     float hL = getWaveHeight(pos - vec2(eps, 0.0), time);
     float hR = getWaveHeight(pos + vec2(eps, 0.0), time);
     float hD = getWaveHeight(pos - vec2(0.0, eps), time);
     float hU = getWaveHeight(pos + vec2(0.0, eps), time);
     
     // Laplacian: second derivative approximation
-    float curvature = abs((hL + hR + hD + hU - 4.0 * h0) / (eps * eps));
+    float curvature = abs((hL + hR + hD + hU - 4.0 * height) / (eps * eps));
     
     // Foam appears where:
     // 1. Waves are steep (slope > threshold)
@@ -275,10 +357,13 @@ float getFoam(vec2 pos, vec3 normal, float time) {
     // Combine foam factors - all contribute
     float foam = steepnessFoam * 0.5 + curvatureFoam * 0.3 + crestFoam * 0.2;
     
-    // Add subtle wave-based variation (not noise texture)
-    // Use wave height pattern itself for organic variation
-    float wavePattern = sin(dot(pos, vec2(0.7, 0.3)) * 2.0 + time * 0.5) * 0.5 + 0.5;
-    foam *= (0.7 + 0.3 * wavePattern); // Subtle variation, not dominant
+    // Add subtle wave-based variation for organic appearance
+    // Use wave height pattern itself for seamless variation
+    const vec2 wavePatternDir = vec2(0.7, 0.3);
+    const float wavePatternFreq = 2.0;
+    const float wavePatternSpeed = 0.5;
+    float wavePattern = sin(dot(pos, wavePatternDir) * wavePatternFreq + time * wavePatternSpeed) * 0.5 + 0.5;
+    foam *= mix(0.7, 1.0, wavePattern); // Subtle variation, not dominant
     
     // Smooth transitions
     foam = smoothstep(0.2, 0.6, foam);
@@ -305,6 +390,14 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time) {
     
     // Reflection
     vec3 reflectedDir = reflect(-viewDir, normal);
+    
+    // Clamp reflected direction to prevent reflecting below horizon
+    // This prevents blue artifacts near the horizon
+    if (reflectedDir.y < 0.0) {
+        // If reflection points down, use horizon color instead
+        reflectedDir = normalize(vec3(reflectedDir.x, 0.01, reflectedDir.z));
+    }
+    
     vec3 reflectedColor = skyColor(reflectedDir);
     
     // Mix reflection and refraction based on Fresnel
@@ -330,16 +423,17 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time) {
     // Foam - realistic appearance
     float foam = getFoam(pos.xz, normal, time);
     
-    // Foam color: slightly off-white with subtle blue tint
-    vec3 foamColor = vec3(0.95, 0.98, 1.0);
+    // Foam appearance
+    const vec3 FOAM_COLOR = vec3(0.95, 0.98, 1.0); // Slightly off-white with subtle blue tint
+    const float FOAM_OPACITY = 0.85;
+    const float FOAM_SPECULAR_REDUCTION = 0.8;
     
     // Foam reduces specular (foam is more diffuse than water)
-    vec3 foamSpecular = specular * (1.0 - foam * 0.8);
+    vec3 foamSpecular = specular * (1.0 - foam * FOAM_SPECULAR_REDUCTION);
     
     // Blend foam: foam appears on top, mixing with water color
-    // Use smooth blending - foam is semi-transparent
-    float foamOpacity = foam * 0.85;
-    color = mix(color, foamColor, foamOpacity);
+    float foamOpacity = foam * FOAM_OPACITY;
+    color = mix(color, FOAM_COLOR, foamOpacity);
     
     // Reduce specular where foam is present
     color = color - specular + foamSpecular;
