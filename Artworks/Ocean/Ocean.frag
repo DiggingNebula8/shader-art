@@ -168,9 +168,79 @@ float fresnel(vec3 viewDir, vec3 normal)
     return dot(F, vec3(1.0/3.0)); // Return average for mixing
 }
 
+// PBR: Cook-Torrance BRDF Functions
+
+// Normal Distribution Function (GGX/Trowbridge-Reitz)
+float D_GGX(float NdotH, float roughness)
+{
+    float a = roughness * roughness;
+    float a2 = a * a;
+    float NdotH2 = NdotH * NdotH;
+    float denom = (NdotH2 * (a2 - 1.0) + 1.0);
+    return a2 / (PI * denom * denom);
+}
+
+// Geometry Function (Smith with Schlick-GGX)
+float G_SchlickGGX(float NdotV, float roughness)
+{
+    float r = (roughness + 1.0);
+    float k = (r * r) / 8.0;
+    return NdotV / (NdotV * (1.0 - k) + k);
+}
+
+float G_Smith(float NdotV, float NdotL, float roughness)
+{
+    return G_SchlickGGX(NdotV, roughness) * G_SchlickGGX(NdotL, roughness);
+}
+
+// Cook-Torrance specular BRDF
+vec3 specularBRDF(vec3 normal, vec3 viewDir, vec3 lightDir, vec3 lightColor, float roughness)
+{
+    vec3 halfVec = normalize(viewDir + lightDir);
+    float NdotV = max(dot(normal, viewDir), 0.0);
+    float NdotL = max(dot(normal, lightDir), 0.0);
+    float NdotH = max(dot(normal, halfVec), 0.0);
+    float VdotH = max(dot(viewDir, halfVec), 0.0);
+    
+    // Early exit if surface is facing away
+    if (NdotL <= 0.0 || NdotV <= 0.0) return vec3(0.0);
+    
+    float D = D_GGX(NdotH, roughness);
+    float G = G_Smith(NdotV, NdotL, roughness);
+    vec3 F = fresnelSchlick(VdotH, F0_dielectric);
+    
+    vec3 numerator = D * G * F;
+    float denominator = 4.0 * NdotV * NdotL + 0.001; // Avoid division by zero
+    
+    return (numerator / denominator) * lightColor * NdotL;
+}
+
 vec3 skyColor(vec3 dir)
 {
     return mix(vec3(0.6, 0.7, 0.9), vec3(0.1, 0.3, 0.6), dir.y * 0.5 + 0.5);
+}
+
+// PBR: Environment-based ambient lighting
+// Samples sky color based on normal direction for more realistic ambient
+vec3 getEnvironmentLight(vec3 normal)
+{
+    // Sample sky color in the direction of the normal (hemisphere sampling)
+    // Bias towards upward direction for more realistic ambient
+    vec3 skyDir = normalize(normal + vec3(0.0, 1.0, 0.0));
+    return skyColor(skyDir) * 0.3; // Scale down for ambient contribution
+}
+
+// PBR: Tone mapping (Reinhard)
+// Maps HDR colors to LDR display range while preserving detail
+vec3 toneMapReinhard(vec3 color)
+{
+    return color / (color + vec3(1.0));
+}
+
+// PBR: Gamma correction
+vec3 gammaCorrect(vec3 color, float gamma)
+{
+    return pow(max(color, vec3(0.0)), vec3(1.0 / gamma));
 }
 
 float sunSpecular(vec3 normal, vec3 viewDir)
@@ -186,6 +256,18 @@ float sparkleNoise(vec2 p, float time)
     return fract(sin(dot(p * 50.0 + time * 2.0, vec2(12.9898,78.233))) * 43758.5453);
 }
 
+// PBR: Integrate sparkles into BRDF by modifying roughness
+// Sparkles occur where surface is smoother (lower roughness)
+float getRoughnessWithSparkles(vec2 worldPos, float time, float baseRoughness)
+{
+    float sparkleMask = sparkleNoise(worldPos, time);
+    // Reduce roughness where sparkles occur (smoother surface = brighter highlights)
+    // Only apply sparkle roughness reduction where noise is high
+    float sparkleFactor = smoothstep(0.6, 1.0, sparkleMask);
+    return mix(baseRoughness, baseRoughness * 0.1, sparkleFactor * 0.5);
+}
+
+// Legacy sparkle function (kept for reference, but sparkles now integrated into BRDF)
 float computeSparkles(vec3 normal, vec3 viewDir, vec2 worldPos, float time)
 {
     // viewDir is surface → camera, sunDirection is surface → light
@@ -200,13 +282,12 @@ float computeSparkles(vec3 normal, vec3 viewDir, vec2 worldPos, float time)
 vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient)
 {
     // viewDir is now surface → camera (corrected convention)
-    vec3 reflected = skyColor(reflect(viewDir, normal));
     vec3 refracted = baseWaterColor;
     
-    float sunDiffuse = max(dot(normal, sunDirection), 0.0);
-    vec3 sunLight = sunColor * sunDiffuse * sunIntensity;
+    // PBR: Compute Fresnel for energy conservation
+    vec3 F = getFresnel(viewDir, normal);
+    float f = dot(F, vec3(1.0/3.0)); // Scalar Fresnel for reflection/refraction mixing
     
-    float f = fresnel(viewDir, normal);
     // Use wave-only gradient for foam (excludes ripple detail to avoid foam on small ripples)
     float foam = getFoam(pos.xz, time, gradient);
     
@@ -224,14 +305,64 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient)
     float depthFactor = smoothstep(-depthVariationRange * 0.5, depthVariationRange * 0.5, depthOffset);
     refracted = mix(shallowWaterColor, baseWaterColor, depthFactor);
     
-    vec3 color = mix(refracted, reflected, f);
-    color = color * 0.5 + ambientLightColor * 0.3 + sunLight;
+    // PBR: Cook-Torrance lighting with energy conservation
+    vec3 lightDir = sunDirection;
+    vec3 lightColor = sunColor * sunIntensity;
     
-    color += sunSpecular(normal, viewDir) * sunColor * 1.5;
-    color += computeSparkles(normal, viewDir, pos.xz, time) * vec3(1.5, 1.4, 1.3);
+    float NdotL = max(dot(normal, lightDir), 0.0);
+    
+    // PBR: Dynamic roughness with sparkles integrated
+    // Sparkles occur where surface is smoother (lower roughness)
+    float dynamicRoughness = getRoughnessWithSparkles(pos.xz, time, roughness);
+    
+    // Specular (Cook-Torrance BRDF with sparkle-integrated roughness)
+    vec3 specular = specularBRDF(normal, viewDir, lightDir, lightColor, dynamicRoughness);
+    
+    // Energy-conserving diffuse (Lambertian)
+    // kS = Fresnel (specular contribution)
+    // kD = (1 - kS) * (1 - metallic) for dielectrics
+    vec3 kS = F; // Specular contribution from Fresnel
+    vec3 kD = (1.0 - kS) * (1.0 - metallic); // Diffuse contribution (energy conserving)
+    
+    // Lambertian diffuse: kD * albedo * lightColor * NdotL / PI
+    vec3 diffuse = kD * albedo * lightColor * NdotL / PI;
+    
+    // Environment-based ambient (samples sky based on normal)
+    vec3 ambient = getEnvironmentLight(normal) * albedo;
+    
+    // Reflection/refraction contribution (integrated into BRDF)
+    // Reflection is already handled by specular BRDF, refraction contributes to base color
+    // Mix reflection and refraction based on Fresnel
+    vec3 reflected = skyColor(reflect(viewDir, normal));
+    vec3 baseColor = mix(refracted, reflected, f);
+    
+    // Combine: base color (reflection/refraction) + ambient + diffuse + specular
+    // Base color contributes less since reflection is also in specular
+    vec3 color = baseColor * 0.2 + ambient + diffuse + specular;
+    
+    // Sparkles are now integrated into BRDF via dynamic roughness
+    // Optional: Add subtle extra sparkle highlights for visual enhancement
+    // (reduced intensity since sparkles are already in specular)
+    float sparkleHighlight = computeSparkles(normal, viewDir, pos.xz, time);
+    color += sparkleHighlight * vec3(0.3, 0.25, 0.2); // Subtle enhancement
+    
+    // Foam overlay
     color = mix(color, vec3(1.0), foam * foamIntensity);
     
-    return pow(color, vec3(0.95));
+    // Apply absorption based on depth
+    vec3 absorption = exp(-waterAbsorption * depth);
+    color *= absorption;
+    
+    // PBR: Energy conservation - clamp to reasonable HDR range
+    color = min(color, vec3(10.0)); // Max 10x brightness (HDR)
+    
+    // PBR: Tone mapping (Reinhard) - maps HDR to LDR
+    color = toneMapReinhard(color);
+    
+    // PBR: Gamma correction for display
+    color = gammaCorrect(color, 2.2);
+    
+    return color;
 }
 
 vec3 raymarchOcean(vec3 ro, vec3 rd, float time)
