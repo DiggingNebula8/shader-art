@@ -80,7 +80,8 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec3 color = shadeOcean(stablePos, normal, viewDir, iTime, gradient, sky);
     
     // Apply atmospheric fog/haze using the SkyAtmosphere system
-    color = applyAtmosphericFog(color, pos, cam.position, rd, sky, iTime);
+    // Use stablePos for fog calculation to match shading position
+    color = applyAtmosphericFog(color, stablePos, cam.position, rd, sky, iTime);
     
     // Apply camera exposure (physically-based)
     // This multiplies the color by the exposure value

@@ -76,6 +76,20 @@ float waveFreqs[NUM_WAVES] = float[](
 // Time scaling factor to slow down wave motion for more realistic appearance
 const float TIME_SCALE = 0.3; // Slower, more contemplative motion
 
+// Precomputed wave speeds for efficiency (calculated once, used many times)
+const float waveSpeeds[NUM_WAVES] = float[](
+    sqrt(GRAVITY * 0.12) * TIME_SCALE,  // Primary swell
+    sqrt(GRAVITY * 0.20) * TIME_SCALE,  // Secondary swell
+    sqrt(GRAVITY * 0.32) * TIME_SCALE,  // Tertiary swell
+    sqrt(GRAVITY * 0.50) * TIME_SCALE,  // Cross swell
+    sqrt(GRAVITY * 0.85) * TIME_SCALE,  // Detail wave 1
+    sqrt(GRAVITY * 1.4) * TIME_SCALE,   // Detail wave 2
+    sqrt(GRAVITY * 2.2) * TIME_SCALE,   // Detail wave 3
+    sqrt(GRAVITY * 3.5) * TIME_SCALE,   // Detail wave 4
+    sqrt(GRAVITY * 5.5) * TIME_SCALE,   // Detail wave 5
+    sqrt(GRAVITY * 8.5) * TIME_SCALE    // Detail wave 6
+);
+
 float getWaveSpeed(float k) {
     return sqrt(GRAVITY * k) * TIME_SCALE;
 }
@@ -160,61 +174,30 @@ float getOceanFloorHeight(vec2 pos, OceanFloorParams params) {
 // GERSTNER WAVE FUNCTIONS
 // ============================================================================
 
-// Gerstner Wave Function
-// Based on: Tessendorf "Simulating Ocean Water"
-// Properly models wave motion with horizontal displacement
-vec3 gerstnerWave(vec2 pos, vec2 dir, float amplitude, float frequency, float speed, float time, float steepness) {
-    float k = frequency;
-    float w = speed; // Wave speed from dispersion
-    float phase = dot(pos, dir) * k + time * w;
-    float s = sin(phase);
-    float c = cos(phase);
-    
-    // Horizontal displacement (choppy waves)
-    float q = steepness / (k * amplitude);
-    vec2 displacement = dir * q * amplitude * c;
-    
-    // Vertical displacement
-    float height = amplitude * s;
-    
-    return vec3(displacement.x, height, displacement.y);
-}
+// Removed gerstnerWave and getWaveDisplacement - optimized to use direct height/gradient calculations
+// Horizontal displacement (choppy waves) is not needed for current implementation
 
-vec3 getWaveDisplacement(vec2 pos, float time) {
-    vec3 displacement = vec3(0.0);
-    
+// Optimized: directly calculate height without full displacement
+// Uses precomputed wave speeds for efficiency
+float getWaveHeight(vec2 pos, float time) {
+    float height = 0.0;
     for (int i = 0; i < NUM_WAVES; i++) {
         vec2 dir = getWaveDir(i);
         float k = waveFreqs[i];
-        float w = getWaveSpeed(k);
-        
-        // Steepness varies by wave - follows realistic ocean physics
-        float steepness;
-        if (i == 0) steepness = 0.04;      // Primary swell - very gentle
-        else if (i == 1) steepness = 0.06; // Secondary swell
-        else if (i == 2) steepness = 0.07; // Tertiary swell
-        else if (i == 3) steepness = 0.08; // Cross swell
-        else if (i == 4) steepness = 0.10; // Detail wave 1
-        else if (i == 5) steepness = 0.12; // Detail wave 2
-        else if (i == 6) steepness = 0.14; // Detail wave 3
-        else if (i == 7) steepness = 0.16; // Detail wave 4
-        else if (i == 8) steepness = 0.18; // Detail wave 5
-        else steepness = 0.20;            // Detail wave 6 - choppiest
-        
-        displacement += gerstnerWave(pos, dir, waveAmps[i], k, w, time, steepness);
+        float w = waveSpeeds[i]; // Use precomputed speed
+        float spatialPhase = dot(pos, dir) * k;
+        float temporalPhase = time * w;
+        float phase = spatialPhase + temporalPhase;
+        height += waveAmps[i] * sin(phase);
     }
-    
-    return displacement;
-}
-
-float getWaveHeight(vec2 pos, float time) {
-    vec3 disp = getWaveDisplacement(pos, time);
-    return disp.y;
+    return height;
 }
 
 // Compute wave height and gradient analytically (much faster than finite differences)
 // Returns vec3(height, grad.x, grad.y)
 // Uses temporally stable phase calculation to reduce precision issues
+// Optimized: compute height and gradient together when both needed
+// Returns vec3(height, grad.x, grad.y)
 vec3 getWaveHeightAndGradient(vec2 pos, float time) {
     float height = 0.0;
     vec2 grad = vec2(0.0);
@@ -222,9 +205,8 @@ vec3 getWaveHeightAndGradient(vec2 pos, float time) {
     for (int i = 0; i < NUM_WAVES; i++) {
         vec2 dir = getWaveDir(i);
         float k = waveFreqs[i];
-        float w = getWaveSpeed(k);
+        float w = waveSpeeds[i]; // Use precomputed speed
         // Calculate phase with improved precision
-        // Split calculation to reduce precision loss
         float spatialPhase = dot(pos, dir) * k;
         float temporalPhase = time * w;
         float phase = spatialPhase + temporalPhase;
@@ -233,57 +215,64 @@ vec3 getWaveHeightAndGradient(vec2 pos, float time) {
         float c = cos(phase);
         float A = waveAmps[i];
         
-        // Height: sum of vertical displacements
         height += A * s;
-        
-        // Analytical gradient: ∂h/∂pos = amplitude * k * dir * cos(phase)
         grad += A * k * dir * c;
     }
     
     return vec3(height, grad.x, grad.y);
 }
 
+// Optimized: return gradient directly without full vec3
+// Uses precomputed wave speeds for efficiency
 vec2 getWaveGradient(vec2 pos, float time) {
-    vec3 hg = getWaveHeightAndGradient(pos, time);
-    return hg.yz; // Return gradient components
+    vec2 grad = vec2(0.0);
+    for (int i = 0; i < NUM_WAVES; i++) {
+        vec2 dir = getWaveDir(i);
+        float k = waveFreqs[i];
+        float w = waveSpeeds[i]; // Use precomputed speed
+        float spatialPhase = dot(pos, dir) * k;
+        float temporalPhase = time * w;
+        float phase = spatialPhase + temporalPhase;
+        grad += waveAmps[i] * k * dir * cos(phase);
+    }
+    return grad;
 }
 
 // Enhanced normal calculation with analytical derivatives
-// Uses temporally stable smoothing to reduce jittering
+// Optimized: computes height and gradient together to minimize redundant calculations
 vec3 getNormal(vec2 pos, float time, out vec2 gradient) {
-    // Get base gradient analytically (fast and accurate)
-    vec2 grad = getWaveGradient(pos, time);
+    // Compute base height and gradient together (single wave loop)
+    vec3 hg = getWaveHeightAndGradient(pos, time);
+    vec2 grad = hg.yz;
+    float waveHeight = hg.x;
     
     // Temporally stable smoothing using rotated offsets to reduce aliasing
-    // Use a small rotation based on position to break up patterns
     float angle = dot(pos, vec2(0.7071, 0.7071)) * 0.5; // Stable rotation
     float cosA = cos(angle);
     float sinA = sin(angle);
-    vec2 rotX = vec2(cosA, sinA);
-    vec2 rotY = vec2(-sinA, cosA);
+    vec2 rotX = vec2(cosA, sinA) * 0.01; // Pre-multiply smoothing radius
+    vec2 rotY = vec2(-sinA, cosA) * 0.01;
     
-    const float smoothingRadius = 0.01;
+    // Optimized: compute smoothing samples efficiently (unrolled for better performance)
     vec2 gradSmooth = grad;
-    gradSmooth += getWaveGradient(pos + rotX * smoothingRadius, time) * 0.15;
-    gradSmooth += getWaveGradient(pos - rotX * smoothingRadius, time) * 0.15;
-    gradSmooth += getWaveGradient(pos + rotY * smoothingRadius, time) * 0.15;
-    gradSmooth += getWaveGradient(pos - rotY * smoothingRadius, time) * 0.15;
+    gradSmooth += getWaveGradient(pos + rotX, time) * 0.15;
+    gradSmooth += getWaveGradient(pos - rotX, time) * 0.15;
+    gradSmooth += getWaveGradient(pos + rotY, time) * 0.15;
+    gradSmooth += getWaveGradient(pos - rotY, time) * 0.15;
     grad = mix(grad, gradSmooth / 1.6, 0.2); // Very gentle smoothing
     
     gradient = grad;
     
-    // Build normal from gradient (analytical, no finite differences needed)
+    // Build normal from gradient
     vec3 normal = normalize(vec3(-grad.x, 1.0, -grad.y));
     
     // Add subtle micro-detail only where needed (reduces banding)
-    // Use temporally stable offsets
-    float waveHeight = getWaveHeight(pos, time);
     float crestFactor = smoothstep(-0.2, 0.3, waveHeight);
     
     if (crestFactor > 0.1) {
-        const float microDetail = 0.02;
-        vec2 microX = rotX * microDetail;
-        vec2 microY = rotY * microDetail;
+        // Pre-multiply micro detail with rotation vectors
+        vec2 microX = rotX * 2.0; // 0.01 * 2.0 = 0.02
+        vec2 microY = rotY * 2.0;
         vec2 gradX = getWaveGradient(pos + microX, time);
         vec2 gradY = getWaveGradient(pos + microY, time);
         
@@ -306,14 +295,11 @@ vec3 fresnelSchlick(float cosTheta, vec3 F0) {
 }
 
 // Wavelength-dependent Fresnel F0 for water-air interface
+// Cached as constant to avoid redundant calculations
+const vec3 WATER_F0 = vec3(0.018, 0.019, 0.020);
+
 vec3 getWaterF0() {
-    vec3 waterIOR = vec3(1.331, 1.333, 1.335);
-    vec3 airIOR = vec3(1.0);
-    
-    vec3 ratio = (airIOR - waterIOR) / (airIOR + waterIOR);
-    vec3 F0 = ratio * ratio;
-    
-    return clamp(F0, vec3(0.018), vec3(0.022));
+    return WATER_F0;
 }
 
 // Proper Fresnel calculation for water surface
@@ -327,14 +313,7 @@ vec3 getFresnel(vec3 viewDir, vec3 normal) {
     return clamp(F, F0, vec3(1.0));
 }
 
-// Fresnel for specular highlights (uses half-vector for microfacet model)
-vec3 getFresnelSpecular(vec3 viewDir, vec3 lightDir, vec3 normal) {
-    vec3 halfVec = normalize(viewDir + lightDir);
-    float VdotH = max(dot(viewDir, halfVec), 0.0);
-    
-    vec3 F0 = getWaterF0();
-    return fresnelSchlick(VdotH, F0);
-}
+// Removed unused getFresnelSpecular - specularBRDF handles this internally
 
 // ============================================================================
 // PBR SHADING MODELS
@@ -442,46 +421,7 @@ vec3 getSubsurfaceScattering(vec3 normal, vec3 viewDir, vec3 lightDir, float dep
     return result;
 }
 
-// Wave Energy Calculation
-// Fixed to avoid temporal discontinuities
-float calculateWaveEnergy(vec2 pos, float time) {
-    vec2 grad = getWaveGradient(pos, time);
-    float slope = length(grad);
-    float height = getWaveHeight(pos, time);
-    
-    float kineticEnergy = slope * slope * 2.5;
-    float potentialEnergy = height * height * 0.6;
-    
-    // Use analytical velocity instead of finite difference to avoid temporal jitter
-    // Velocity is the time derivative: dh/dt = sum(A * w * cos(phase))
-    float velocity = 0.0;
-    for (int i = 0; i < NUM_WAVES; i++) {
-        vec2 dir = getWaveDir(i);
-        float k = waveFreqs[i];
-        float w = getWaveSpeed(k);
-        float phase = dot(pos, dir) * k + time * w;
-        velocity += waveAmps[i] * w * cos(phase);
-    }
-    float velocityEnergy = abs(velocity) * abs(velocity) * 1.5;
-    
-    float energy = kineticEnergy + potentialEnergy + velocityEnergy;
-    
-    energy = smoothstep(0.15, 2.0, energy);
-    
-    float energyDetail = 0.0;
-    for (int i = 0; i < min(NUM_WAVES, 4); i++) {
-        vec2 dir = getWaveDir(i);
-        float k = waveFreqs[i];
-        float w = getWaveSpeed(k);
-        float phase = dot(pos, dir) * k + time * w;
-        float waveContrib = abs(sin(phase)) * waveAmps[i];
-        energyDetail += waveContrib;
-    }
-    energyDetail = smoothstep(0.2, 1.5, energyDetail * 0.3);
-    energy = max(energy, energyDetail * 0.4);
-    
-    return energy;
-}
+// Removed unused calculateWaveEnergy function
 
 // ============================================================================
 // WATER TRANSLUCENCY & CAUSTICS
@@ -582,15 +522,8 @@ vec3 calculateCaustics(vec3 floorPos, vec3 waterSurfacePos, vec3 waterNormal, ve
     
     causticsIntensity /= float(numSamples);
     
-    float largeScalePattern = 0.0;
-    for (int i = 0; i < min(NUM_WAVES, 5); i++) {
-        vec2 dir = getWaveDir(i);
-        float k = waveFreqs[i];
-        float w = getWaveSpeed(k);
-        float phase = dot(surfacePos, dir) * k + time * w;
-        largeScalePattern += sin(phase) * waveAmps[i] * 0.15;
-    }
-    largeScalePattern = abs(largeScalePattern);
+    // Optimized: reuse wave height calculation for large scale pattern
+    float largeScalePattern = abs(getWaveHeight(surfacePos, time)) * 0.15;
     causticsIntensity += largeScalePattern * 0.3;
     
     float depthFalloff = exp(-depth * 0.05);
@@ -700,12 +633,23 @@ vec3 getDistortedReflectionDir(vec3 reflectedDir, vec3 normal, float roughness, 
 // ============================================================================
 
 vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient, SkyAtmosphere sky) {
+    // Cache lighting evaluation - called once per pixel
     LightingInfo light = evaluateLighting(sky, time);
     vec3 sunDir = light.sunDirection;
     vec3 sunColor = light.sunColor;
     float sunIntensity = light.sunIntensity;
     
-    OceanFloorParams floorParams = createDefaultOceanFloor();
+    // Use default ocean floor params (inline to avoid function call overhead)
+    OceanFloorParams floorParams;
+    floorParams.baseDepth = -105.0;
+    floorParams.heightVariation = 25.0;
+    floorParams.largeScale = 0.02;
+    floorParams.mediumScale = 0.08;
+    floorParams.smallScale = 0.3;
+    floorParams.largeAmplitude = 0.6;
+    floorParams.mediumAmplitude = 0.3;
+    floorParams.smallAmplitude = 0.1;
+    floorParams.roughness = 0.5;
     
     float floorHeight = getOceanFloorHeight(pos.xz, floorParams);
     float depth = max(pos.y - floorHeight, 0.1);
@@ -720,6 +664,9 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient, 
     float eta = AIR_IOR / WATER_IOR;
     vec3 refractedDir = refractRay(-viewDir, normal, eta);
     
+    // Cache absorption calculation early (used in multiple places)
+    vec3 baseAbsorption = exp(-waterAbsorption * depth);
+    
     vec3 refractedColor = vec3(0.0);
     float translucencyFactor = 1.0 - smoothstep(3.0, 25.0, depth);
     
@@ -732,6 +679,7 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient, 
             vec3 floorPos = pos + refractedDir * waterPathLength;
             vec3 floorNormal = getOceanFloorNormal(floorPos, floorParams);
             
+            // shadeOceanFloor will call evaluateLighting internally (acceptable trade-off for API simplicity)
             vec3 floorColor = shadeOceanFloor(floorPos, -refractedDir, floorNormal, time, floorParams, sky, pos, normal);
             
             vec3 absorption = exp(-waterAbsorption * waterPathLength);
@@ -740,16 +688,13 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient, 
             vec3 waterTint = mix(shallowWaterColor, deepWaterColor, 1.0 - exp(-waterPathLength * 0.04));
             refractedColor = mix(refractedColor, waterTint, 0.25);
         } else {
-            vec3 absorption = exp(-waterAbsorption * depth);
-            refractedColor = waterColor * absorption;
+            refractedColor = waterColor * baseAbsorption;
         }
     } else {
-        vec3 absorption = exp(-waterAbsorption * depth);
-        refractedColor = waterColor * absorption;
+        refractedColor = waterColor * baseAbsorption;
     }
-    
     if (translucencyFactor < 1.0) {
-        vec3 baseWaterRefracted = waterColor * exp(-waterAbsorption * depth);
+        vec3 baseWaterRefracted = waterColor * baseAbsorption;
         refractedColor = mix(baseWaterRefracted, refractedColor, translucencyFactor);
     }
     
@@ -758,8 +703,8 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient, 
     
     vec3 F = getFresnel(viewDir, normal);
     
-    vec3 incidentDir = -viewDir;
-    vec3 reflectedDir = reflect(incidentDir, normal);
+    // Calculate reflection direction once and reuse
+    vec3 reflectedDir = reflect(-viewDir, normal);
     vec3 distortedReflectedDir = getDistortedReflectionDir(reflectedDir, normal, dynamicRoughness, pos.xz, time);
     
     float reflectionElevation = distortedReflectedDir.y;
@@ -805,6 +750,7 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient, 
         reflectedColor = sampleSum / sampleWeight;
     }
     
+    // Cache light calculations
     vec3 lightDir = sunDir;
     vec3 lightColor = sunColor * sunIntensity;
     
@@ -816,18 +762,6 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient, 
     
     float NdotL = max(dot(normal, lightDir), 0.0);
     
-    vec3 specularReflectionDir = reflect(-viewDir, normal);
-    vec3 skySpecularColor = skyColor(specularReflectionDir, sky, time);
-    
-    vec3 specular = specularBRDF(normal, viewDir, lightDir, lightColor, dynamicRoughness, skySpecularColor);
-    specular *= 1.2;
-    
-    vec3 waterAlbedo = mix(shallowWaterColor, deepWaterColor, depthFactor * 0.5);
-    waterAlbedo *= 0.3;
-    vec3 diffuse = kD * waterAlbedo * lightColor * NdotL / PI;
-    
-    vec3 subsurface = getSubsurfaceScattering(normal, viewDir, lightDir, depth);
-    
     vec3 ambientDiffuse = vec3(0.0);
     vec3 ambientSpecular = vec3(0.0);
     
@@ -836,13 +770,16 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient, 
     float skyUpWeight = max(dot(normal, skyUp), 0.0);
     
     vec3 hemisphereAvg = skyUpColor * 0.5;
+    
+    vec3 waterAlbedo = mix(shallowWaterColor, deepWaterColor, depthFactor * 0.5);
+    waterAlbedo *= 0.3;
     ambientDiffuse += hemisphereAvg * kD * waterAlbedo * skyUpWeight;
     
-    vec3 normalReflected = reflect(-viewDir, normal);
+    // Reuse reflectedDir calculated earlier for ambient IBL (avoid duplicate calculation)
     vec3 normalReflectedColor = vec3(0.0);
     
-    if (normalReflected.y > 0.0) {
-        normalReflectedColor = skyColor(normalReflected, sky, time);
+    if (reflectedDir.y > 0.0) {
+        normalReflectedColor = skyColor(reflectedDir, sky, time);
         
         if (dynamicRoughness > baseRoughness * 1.2) {
             const int numIBLSamples = 3;
@@ -855,7 +792,7 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient, 
             for (int i = 0; i < numIBLSamples; i++) {
                 float angle = float(i) * TAU / float(numIBLSamples) + jitter;
                 vec3 offset = vec3(cos(angle), 0.0, sin(angle)) * dynamicRoughness * 0.1;
-                vec3 sampleDir = normalize(normalReflected + offset);
+                vec3 sampleDir = normalize(reflectedDir + offset);
                 if (sampleDir.y > 0.0) {
                     vec3 sampleColor = skyColor(sampleDir, sky, time);
                     sampleSum += sampleColor;
@@ -867,6 +804,18 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient, 
         
         ambientSpecular += normalReflectedColor * F;
     }
+    
+    // Reuse normalReflectedColor for specular if available, otherwise compute
+    vec3 skySpecularColor = (reflectedDir.y > 0.0 && length(normalReflectedColor) > 0.001) 
+        ? normalReflectedColor 
+        : skyColor(reflectedDir, sky, time);
+    
+    vec3 specular = specularBRDF(normal, viewDir, lightDir, lightColor, dynamicRoughness, skySpecularColor);
+    specular *= 1.2;
+    
+    vec3 diffuse = kD * waterAlbedo * lightColor * NdotL / PI;
+    
+    vec3 subsurface = getSubsurfaceScattering(normal, viewDir, lightDir, depth);
     
     vec3 ambient = ambientDiffuse + ambientSpecular * 0.3;
     
