@@ -675,7 +675,163 @@ float getOpticalDepth(vec3 dir, float scaleHeight) {
     return scaleHeight / elevation;
 }
 
-// Enhanced physically-based sky color with time-of-day support
+// --- Advanced Sky Sphere System ---
+// Comprehensive sky rendering with volumetric clouds, stars, and enhanced atmospheric scattering
+
+// Star field generation for night sky
+float hash3(vec3 p) {
+    p = fract(p * 0.3183099 + 0.1);
+    p *= 17.0;
+    return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+}
+
+float stars(vec3 dir) {
+    // Project direction to sphere coordinates
+    vec3 p = dir * 1000.0; // Scale for star density
+    float star = hash3(floor(p));
+    
+    // Only show stars above certain brightness threshold
+    star = smoothstep(0.98, 1.0, star);
+    
+    // Add twinkling effect
+    float twinkle = sin(dot(p, vec3(12.9898, 78.233, 45.164)) * 0.1) * 0.5 + 0.5;
+    star *= mix(0.5, 1.0, twinkle);
+    
+    return star;
+}
+
+// Volumetric cloud density using multi-octave noise
+float cloudDensity(vec3 pos, float time) {
+    // Cloud layer height (above sea level)
+    const float CLOUD_HEIGHT = 800.0;
+    const float CLOUD_THICKNESS = 400.0;
+    
+    // Check if we're in cloud layer
+    if (pos.y < CLOUD_HEIGHT || pos.y > CLOUD_HEIGHT + CLOUD_THICKNESS) {
+        return 0.0;
+    }
+    
+    // Cloud position in cloud space
+    vec3 cloudPos = pos;
+    float cloudY = (pos.y - CLOUD_HEIGHT) / CLOUD_THICKNESS; // Normalize to [0, 1]
+    
+    // Wind effect (clouds drift)
+    vec2 windOffset = vec2(time * 0.02, time * 0.015);
+    vec2 cloudXY = cloudPos.xz * 0.001 + windOffset;
+    
+    // Vertical falloff (clouds are flatter, denser in middle)
+    float verticalFalloff = 1.0 - abs(cloudY - 0.5) * 2.0;
+    verticalFalloff = smoothstep(0.0, 1.0, verticalFalloff);
+    
+    // Multi-octave noise for cloud shape
+    float density = 0.0;
+    float amplitude = 1.0;
+    float frequency = 1.0;
+    
+    // Base cloud shape (large scale)
+    for (int i = 0; i < 4; i++) {
+        vec2 p = cloudXY * frequency;
+        float n = smoothNoise(p) * 0.6 + 
+                  smoothNoise(p * 2.0 + vec2(100.0)) * 0.3 +
+                  smoothNoise(p * 4.0 + vec2(200.0)) * 0.1;
+        
+        density += n * amplitude;
+        amplitude *= 0.5;
+        frequency *= 2.0;
+    }
+    
+    // Normalize density
+    density = density / 1.875; // Sum of amplitudes: 1.0 + 0.5 + 0.25 + 0.125 = 1.875
+    
+    // Apply vertical falloff
+    density *= verticalFalloff;
+    
+    // Shape the density (clouds have soft edges)
+    density = smoothstep(0.35, 0.65, density);
+    
+    return density;
+}
+
+// Sample clouds along a ray (optimized for sky sphere)
+float sampleClouds(vec3 rayStart, vec3 rayDir, float time, float maxDist) {
+    const float CLOUD_HEIGHT = 800.0;
+    const float CLOUD_THICKNESS = 400.0;
+    
+    // Find intersection with cloud layer
+    if (rayDir.y <= 0.0) return 0.0; // Ray going down (below horizon)
+    
+    float t0 = (CLOUD_HEIGHT - rayStart.y) / rayDir.y;
+    float t1 = ((CLOUD_HEIGHT + CLOUD_THICKNESS) - rayStart.y) / rayDir.y;
+    
+    // Ensure correct order
+    if (t0 > t1) {
+        float temp = t0;
+        t0 = t1;
+        t1 = temp;
+    }
+    
+    if (t1 < 0.0 || t0 > maxDist) return 0.0;
+    
+    t0 = max(0.0, t0);
+    t1 = min(maxDist, t1);
+    
+    if (t1 <= t0) return 0.0;
+    
+    // Sample clouds with adaptive step size
+    float density = 0.0;
+    float stepSize = 25.0;
+    float t = t0;
+    int maxSteps = 12;
+    
+    for (int i = 0; i < maxSteps; i++) {
+        if (t >= t1) break;
+        
+        vec3 pos = rayStart + rayDir * t;
+        float d = cloudDensity(pos, time);
+        density += d * stepSize;
+        
+        t += stepSize;
+    }
+    
+    // Transmittance (Beer's law) - clouds absorb and scatter light
+    float extinction = density * 0.0008;
+    return 1.0 - exp(-extinction);
+}
+
+// Cloud lighting with realistic scattering
+vec3 cloudColor(vec3 dir, vec3 sunDir, float sunIntensity, float sunElevation, float time) {
+    float sunDot = max(dot(dir, sunDir), 0.0);
+    float elevation = max(dir.y, 0.0);
+    
+    // Base cloud color varies with time of day
+    vec3 baseColor;
+    if (sunElevation < 0.0) {
+        // Night: dark gray clouds
+        baseColor = vec3(0.15, 0.15, 0.18);
+    } else if (sunElevation < 0.2) {
+        // Sunrise/sunset: warm colored clouds
+        float sunsetFactor = smoothstep(0.2, 0.0, sunElevation);
+        baseColor = mix(vec3(0.85, 0.8, 0.75), vec3(0.9, 0.6, 0.4), sunsetFactor);
+    } else {
+        // Day: white/bright clouds
+        baseColor = vec3(0.95, 0.95, 1.0);
+    }
+    
+    // Sun lighting on clouds (forward scattering)
+    float sunLighting = pow(sunDot, 0.3) * sunIntensity;
+    vec3 sunLit = baseColor * sunLighting;
+    
+    // Ambient cloud color (scattered light from sky)
+    vec3 ambient = baseColor * mix(0.2, 0.4, elevation);
+    
+    // Cloud shadowing (darker on bottom, brighter on top)
+    float verticalGradient = pow(elevation, 0.3);
+    vec3 gradient = mix(baseColor * 0.7, baseColor, verticalGradient);
+    
+    return (sunLit + ambient) * gradient;
+}
+
+// Enhanced physically-based sky color with volumetric clouds and stars
 // Based on: Preetham et al. "A Practical Analytic Model for Daylight"
 //          and improved atmospheric scattering with proper day/night transitions
 vec3 skyColor(vec3 dir, float time) {
@@ -717,11 +873,35 @@ vec3 skyColor(vec3 dir, float time) {
     float mieInScatter = BETA_M * miePhaseValue * sunMieTransmittance;
     
     // Sky color from scattered sunlight (enhanced with time-of-day)
-    vec3 sky = (rayleighInScatter + vec3(mieInScatter)) * sunColor * sunIntensity * 2.0;
+    // Scale factor to make scattering visible (physical values are too small for rendering)
+    float scatteringScale = 80000.0; // Scale up physical scattering coefficients
+    vec3 sky = (rayleighInScatter + vec3(mieInScatter)) * sunColor * sunIntensity * scatteringScale;
+    
+    // Add base sky brightness (direct sky light, not just scattered)
+    // This ensures the sky is bright during day time
+    vec3 baseSkyBrightness;
+    if (sunElevation < 0.0) {
+        // Night: very dim
+        baseSkyBrightness = vec3(0.01, 0.015, 0.02) * (1.0 - rayleighTransmittance);
+    } else if (sunElevation < 0.1) {
+        // Twilight: moderate
+        float twilightFactor = smoothstep(0.0, 0.1, sunElevation);
+        baseSkyBrightness = mix(vec3(0.05, 0.08, 0.12), vec3(0.4, 0.5, 0.6), twilightFactor);
+        baseSkyBrightness *= (1.0 - rayleighTransmittance);
+    } else {
+        // Day: bright blue sky
+        // Sky gets bluer at zenith, whiter near horizon
+        vec3 zenithColor = vec3(0.3, 0.5, 0.8); // Blue sky
+        vec3 horizonColor = vec3(0.6, 0.7, 0.8); // White/light blue near horizon
+        baseSkyBrightness = mix(horizonColor, zenithColor, pow(elevation, 0.5));
+        baseSkyBrightness *= sunIntensity * 0.5;
+    }
+    sky += baseSkyBrightness;
     
     // Add ambient sky light (scattered from all directions)
     // Enhanced for night time with subtle blue glow
-    vec3 ambientSky = BETA_R * 0.5 * (1.0 - rayleighTransmittance);
+    // Scale ambient to be visible
+    vec3 ambientSky = BETA_R * 2000.0 * (1.0 - rayleighTransmittance);
     if (sunElevation < 0.0) {
         // Night time: add subtle blue ambient from starlight/moonlight
         ambientSky += vec3(0.01, 0.02, 0.04) * (1.0 - rayleighTransmittance.b) * 0.5;
@@ -752,7 +932,9 @@ vec3 skyColor(vec3 dir, float time) {
     sky += horizonGlowColor * horizonIntensity;
     
     // Apply transmittance for distance (atmospheric perspective)
-    sky *= mix(vec3(1.0), rayleighTransmittance * mieTransmittance, 0.7);
+    // Don't darken too much - keep sky bright during day
+    float transmittanceFactor = mix(1.0, dot(rayleighTransmittance * mieTransmittance, vec3(1.0/3.0)), 0.3);
+    sky *= mix(vec3(1.0), vec3(transmittanceFactor), smoothstep(0.0, 0.3, sunElevation));
     
     // Enhanced sun disk with time-of-day variation
     const float SUN_ANGULAR_SIZE = 0.0093; // ~0.53 degrees in radians
@@ -777,10 +959,35 @@ vec3 skyColor(vec3 dir, float time) {
                                 smoothstep(-0.1, 0.1, sunElevation));
     vec3 halo = sunColor * sunHalo * haloIntensity * haloBrightness * sunIntensity;
     
-    // Combine all components
+    // Combine atmospheric components
     vec3 finalSky = sky + sun + halo;
     
-    // Time-of-day dependent minimum brightness
+    // Add star field for night sky
+    if (sunElevation < 0.1 && elevation > 0.1) {
+        float starBrightness = stars(safeDir);
+        // Fade stars near horizon and during twilight
+        float starVisibility = smoothstep(0.0, 0.1, sunElevation) * 
+                               smoothstep(0.0, 0.3, elevation);
+        vec3 starColor = vec3(1.0, 0.98, 0.95) * starBrightness * starVisibility;
+        finalSky += starColor;
+    }
+    
+    // Add volumetric clouds
+    // Only render clouds during day and twilight (not at night)
+    if (sunElevation > -0.2 && elevation > 0.0) {
+        // Sample clouds along ray (from camera position)
+        // For sky sphere, we use a virtual camera at origin
+        vec3 camPos = vec3(0.0, 0.0, 0.0);
+        float cloudOpacity = sampleClouds(camPos, safeDir, time, 2000.0);
+        
+        if (cloudOpacity > 0.01) {
+            vec3 cloudCol = cloudColor(safeDir, sunDir, sunIntensity, sunElevation, time);
+            // Blend clouds with sky (clouds occlude sky behind them)
+            finalSky = mix(finalSky, cloudCol, cloudOpacity);
+        }
+    }
+    
+    // Time-of-day dependent minimum brightness (safety net, shouldn't be needed with proper scattering)
     vec3 minSkyBrightness;
     if (sunElevation < 0.0) {
         // Night: very dark but not black
@@ -788,10 +995,10 @@ vec3 skyColor(vec3 dir, float time) {
     } else if (sunElevation < 0.1) {
         // Twilight: dim
         float twilightFactor = smoothstep(0.0, 0.1, sunElevation);
-        minSkyBrightness = mix(vec3(0.01, 0.02, 0.03), vec3(0.02, 0.05, 0.1), twilightFactor);
+        minSkyBrightness = mix(vec3(0.01, 0.02, 0.03), vec3(0.1, 0.15, 0.2), twilightFactor);
     } else {
-        // Day: brighter minimum
-        minSkyBrightness = vec3(0.02, 0.05, 0.1);
+        // Day: ensure minimum brightness (should already be bright from base sky)
+        minSkyBrightness = vec3(0.2, 0.3, 0.4);
     }
     finalSky = max(finalSky, minSkyBrightness);
     
