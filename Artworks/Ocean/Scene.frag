@@ -11,6 +11,28 @@
 #include "OceanSystem.frag"
 
 // ============================================================================
+// TONE MAPPING
+// ============================================================================
+
+// Reinhard-Jodie tone mapping
+// Separates luminance and chrominance to preserve color saturation better than basic Reinhard
+// This prevents over-compression of bright areas while maintaining good exposure compatibility
+vec3 toneMapReinhardJodie(vec3 x) {
+    // Calculate luminance
+    float luma = dot(x, vec3(0.2126, 0.7152, 0.0722));
+    
+    // Apply Reinhard to luminance only
+    float toneMappedLuma = luma / (1.0 + luma);
+    
+    // Preserve chrominance (color) by scaling by the ratio of tone-mapped to original luminance
+    // This prevents desaturation that basic Reinhard causes
+    vec3 chrominance = x / max(luma, 0.001); // Avoid division by zero
+    vec3 result = chrominance * toneMappedLuma;
+    
+    return clamp(result, 0.0, 1.0);
+}
+
+// ============================================================================
 // MAIN RENDERING FUNCTION
 // ============================================================================
 
@@ -91,9 +113,10 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     // Apply depth of field (if enabled)
     color = applyDepthOfField(color, distance, cam);
     
-    // Tone mapping (Reinhard) - compresses HDR to LDR
-    // Note: Very bright values will be compressed, but exposure changes should still be visible
-    color = color / (color + vec3(1.0));
+    // Tone mapping (Reinhard-Jodie) - compresses HDR to LDR with better color preservation
+    // Separates luminance and chrominance to preserve saturation better than basic Reinhard
+    // Works well with existing exposure system and prevents over-compression
+    color = toneMapReinhardJodie(color);
     
     // Gamma correction
     color = pow(color, vec3(1.0 / 2.2));
