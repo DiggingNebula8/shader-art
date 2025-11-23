@@ -721,9 +721,8 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient, 
     vec3 reflectedColor = skyColor(distortedReflectedDir, sky, time);
     
     float roughnessFactor = smoothstep(baseRoughness, maxRoughness, dynamicRoughness);
-    // Use consistent sample count to avoid temporal flickering
-    int numSamples = int(mix(1.0, 3.0, roughnessFactor));
-    numSamples = max(1, min(3, numSamples)); // Clamp to avoid jumps
+    // Use fixed sample count to avoid temporal flickering
+    const int numSamples = 2; // Fixed sample count for temporal stability
     
     if (numSamples > 1 && dynamicRoughness > baseRoughness * 1.5) {
         vec3 sampleSum = reflectedColor;
