@@ -618,11 +618,12 @@ vec3 getDistortedReflectionDir(vec3 reflectedDir, vec3 normal, float roughness, 
     distortion *= roughness * distortionScale;
     
     vec3 worldUp = vec3(0.0, 1.0, 0.0);
-    vec3 tangent = normalize(cross(worldUp, normal));
+    vec3 tangent = cross(worldUp, normal);
     if (length(tangent) < 0.001) {
-        tangent = normalize(cross(vec3(1.0, 0.0, 0.0), normal));
+        tangent = cross(vec3(1.0, 0.0, 0.0), normal);
     }
-    vec3 bitangent = cross(normal, tangent);
+    tangent = normalize(tangent);
+    vec3 bitangent = normalize(cross(normal, tangent));
     
     vec3 distortedDir = reflectedDir + tangent * distortion.x + bitangent * distortion.y;
     return normalize(distortedDir);

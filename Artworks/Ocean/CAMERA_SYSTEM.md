@@ -278,3 +278,4 @@ color = applyExposure(color, cam);
 5. **For shallow depth of field**: Use wide aperture (f/1.4, f/2.8) and enable DOF
 6. **For deep depth of field**: Use narrow aperture (f/11, f/16) and disable DOF
 
+

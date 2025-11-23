@@ -233,3 +233,4 @@ vec3 color = shadeOcean(pos, normal, viewDir, iTime, gradient, sky);
 color = applyAtmosphericFog(color, pos, cam.position, rayDir, sky, iTime);
 ```
 
+
