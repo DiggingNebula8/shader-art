@@ -432,23 +432,8 @@ float getSunIntensityFromElevation(float sunElevation) {
     return intensity;
 }
 
-// Lighting Configuration (now dynamic)
-vec3 getSunDir(float time) {
-    float tod = getTimeOfDay(time);
-    return getSunDirection(tod);
-}
-
-vec3 getSunColor(float time) {
-    float tod = getTimeOfDay(time);
-    vec3 sunDir = getSunDirection(tod);
-    return getSunColorFromElevation(sunDir.y);
-}
-
-float getSunIntensity(float time) {
-    float tod = getTimeOfDay(time);
-    vec3 sunDir = getSunDirection(tod);
-    return getSunIntensityFromElevation(sunDir.y);
-}
+// Lighting Configuration - now uses SkyAtmosphere passed as parameter
+// These helper functions are deprecated - use evaluateLighting() directly instead
 
 // Water Properties
 const vec3 waterAbsorption = vec3(0.15, 0.045, 0.015); // m^-1 (realistic values)
@@ -1439,39 +1424,8 @@ vec3 evaluateSky(SkyAtmosphere sky, vec3 dir, float time) {
 // Enhanced physically-based sky color with volumetric clouds and stars
 // Based on: Preetham et al. "A Practical Analytic Model for Daylight"
 //          and improved atmospheric scattering with proper day/night transitions
-// LEGACY FUNCTION: Now wraps the new evaluateSky system for backward compatibility
-vec3 skyColor(vec3 dir, float time) {
-    // Create sky from time-of-day system
-    float tod = getTimeOfDay(time);
-    vec3 sunDir = getSunDirection(tod);
-    float sunElev = sunDir.y;
-    
-    // Convert time-of-day to sky configuration
-    SkyAtmosphere sky = createSkyPreset_ClearDay();
-    
-    // Map sun direction to rotation and elevation
-    // Rotation: 0.0 = east (sunrise), 0.5 = noon, 1.0 = west (sunset)
-    float sunRotation = tod;
-    sky.sunRotation = sunRotation;
-    sky.sunElevation = sunElev;
-    sky.sunColor = getSunColorFromElevation(sunElev);
-    sky.sunIntensity = getSunIntensityFromElevation(sunElev);
-    
-    // Auto-configure moon (opposite to sun)
-    if (sunElev < 0.0 || tod < 0.25 || tod > 0.75) {
-        sky.enableMoon = true;
-        sky.moonRotation = mod(tod + 0.5, 1.0);
-        sky.moonElevation = -sunElev;
-    }
-    
-    // Auto-enable stars at night
-    if (sunElev < 0.1) {
-        sky.enableStars = true;
-        float nightFactor = smoothstep(0.1, -0.2, sunElev);
-        sky.starBrightness = nightFactor;
-    }
-    
-    // Use new sky system
+// Sky color evaluation - takes SkyAtmosphere as parameter
+vec3 skyColor(vec3 dir, SkyAtmosphere sky, float time) {
     return evaluateSky(sky, dir, time);
 }
 
@@ -1594,11 +1548,12 @@ vec3 getOceanFloorNormal(vec3 pos, OceanFloorParams floorParams) {
 }
 
 // Shade the ocean floor
-vec3 shadeOceanFloor(vec3 floorPos, vec3 viewDir, vec3 normal, float time, OceanFloorParams floorParams) {
-    // Get dynamic sun properties
-    vec3 sunDir = getSunDir(time);
-    vec3 sunColor = getSunColor(time);
-    float sunIntensity = getSunIntensity(time);
+vec3 shadeOceanFloor(vec3 floorPos, vec3 viewDir, vec3 normal, float time, OceanFloorParams floorParams, SkyAtmosphere sky) {
+    // Get sun properties from sky
+    LightingInfo light = evaluateLighting(sky, time);
+    vec3 sunDir = light.sunDirection;
+    vec3 sunColor = light.sunColor;
+    float sunIntensity = light.sunIntensity;
     
     // Ocean floor material properties
     const vec3 floorColorBase = vec3(0.3, 0.25, 0.2); // Sandy/brown ocean floor
@@ -1632,7 +1587,7 @@ vec3 shadeOceanFloor(vec3 floorPos, vec3 viewDir, vec3 normal, float time, Ocean
 }
 
 // Compute translucency: combine water surface color with visible floor
-vec3 computeTranslucency(vec3 waterSurfacePos, vec3 waterNormal, vec3 viewDir, float time, vec3 waterColor, OceanFloorParams floorParams) {
+vec3 computeTranslucency(vec3 waterSurfacePos, vec3 waterNormal, vec3 viewDir, float time, vec3 waterColor, OceanFloorParams floorParams, SkyAtmosphere sky) {
     // Calculate refracted ray direction (entering water)
     float eta = AIR_IOR / WATER_IOR; // From air to water
     vec3 refractedDir = refractRay(-viewDir, waterNormal, eta);
@@ -1658,7 +1613,7 @@ vec3 computeTranslucency(vec3 waterSurfacePos, vec3 waterNormal, vec3 viewDir, f
     vec3 floorNormal = getOceanFloorNormal(floorPos, floorParams);
     
     // Shade the floor
-    vec3 floorColor = shadeOceanFloor(floorPos, -refractedDir, floorNormal, time, floorParams);
+    vec3 floorColor = shadeOceanFloor(floorPos, -refractedDir, floorNormal, time, floorParams, sky);
     
     // Apply water absorption based on path length through water
     // Longer path = more absorption = darker floor
@@ -1674,12 +1629,13 @@ vec3 computeTranslucency(vec3 waterSurfacePos, vec3 waterNormal, vec3 viewDir, f
     return visibleFloorColor;
 }
 
-// --- Enhanced PBR Shading Function with Time-of-Day Support ---
-vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient) {
-    // Get dynamic sun properties based on time
-    vec3 sunDir = getSunDir(time);
-    vec3 sunColor = getSunColor(time);
-    float sunIntensity = getSunIntensity(time);
+// --- Enhanced PBR Shading Function ---
+vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient, SkyAtmosphere sky) {
+    // Get sun properties from sky
+    LightingInfo light = evaluateLighting(sky, time);
+    vec3 sunDir = light.sunDirection;
+    vec3 sunColor = light.sunColor;
+    float sunIntensity = light.sunIntensity;
     
     // Fresnel - per-channel for energy conservation
     vec3 F = getFresnel(viewDir, normal);
@@ -1711,8 +1667,8 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient) 
         reflectedDir = normalize(vec3(reflectedDir.x, 0.01, reflectedDir.z));
     }
     
-    // Sample sky with time-of-day support
-    vec3 reflectedColor = skyColor(reflectedDir, time);
+    // Sample sky
+    vec3 reflectedColor = skyColor(reflectedDir, sky, time);
     
     // Mix reflection and refraction based on Fresnel (per-channel for energy conservation)
     // Energy conservation: refracted * (1 - F) + reflected * F
@@ -1740,10 +1696,10 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient) 
     // Enhanced ambient lighting with proper IBL
     // Sample environment in normal direction for diffuse ambient
     vec3 ambientDir = normalize(normal + vec3(0.0, 1.0, 0.0)); // Hemisphere sampling
-    vec3 ambientDiffuse = skyColor(ambientDir, time) * kD * waterColor * 0.15;
+    vec3 ambientDiffuse = skyColor(ambientDir, sky, time) * kD * waterColor * 0.15;
     
     // Specular ambient (environment reflection for ambient)
-    vec3 ambientSpecular = skyColor(reflectedDir, time) * F * 0.1;
+    vec3 ambientSpecular = skyColor(reflectedDir, sky, time) * F * 0.1;
     
     vec3 ambient = ambientDiffuse + ambientSpecular;
     
@@ -1775,7 +1731,7 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient) 
     translucencyFactor *= (1.0 - foam * 0.8); // Less visible where there's foam
     
     if (translucencyFactor > 0.01) {
-        vec3 floorColor = computeTranslucency(pos, normal, viewDir, time, waterBase, floorParams);
+        vec3 floorColor = computeTranslucency(pos, normal, viewDir, time, waterBase, floorParams, sky);
         
         // Blend floor color with water color based on translucency factor
         // Use Fresnel to determine how much floor is visible (more visible at grazing angles)
@@ -1911,9 +1867,12 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     // Calculate distance for depth of field
     float distance = length(pos - cam.position);
     
+    // Create sky once and reuse throughout
+    SkyAtmosphere sky = createSkyPreset_CloudyDay();
+    
     // Background
     if (distance > MAX_DIST * 0.95) {
-        vec3 bgColor = skyColor(rd, iTime);
+        vec3 bgColor = skyColor(rd, sky, iTime);
         bgColor = applyExposure(bgColor, cam);
         fragColor = vec4(bgColor, 1.0);
         return;
@@ -1924,34 +1883,8 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec3 normal = getNormal(pos.xz, iTime, gradient);
     vec3 viewDir = -rd;
     
-    // Shade
-    vec3 color = shadeOcean(pos, normal, viewDir, iTime, gradient);
-    
-    // Create sky from time-of-day system for fog
-    float tod = getTimeOfDay(iTime);
-    vec3 sunDir = getSunDirection(tod);
-    float sunElev = sunDir.y;
-    
-    // Convert time-of-day to sky configuration (same as skyColor function)
-    SkyAtmosphere sky = createSkyPreset_ClearDay();
-    sky.sunRotation = tod;
-    sky.sunElevation = sunElev;
-    sky.sunColor = getSunColorFromElevation(sunElev);
-    sky.sunIntensity = getSunIntensityFromElevation(sunElev);
-    
-    // Auto-configure moon (opposite to sun)
-    if (sunElev < 0.0 || tod < 0.25 || tod > 0.75) {
-        sky.enableMoon = true;
-        sky.moonRotation = mod(tod + 0.5, 1.0);
-        sky.moonElevation = -sunElev;
-    }
-    
-    // Auto-enable stars at night
-    if (sunElev < 0.1) {
-        sky.enableStars = true;
-        float nightFactor = smoothstep(0.1, -0.2, sunElev);
-        sky.starBrightness = nightFactor;
-    }
+    // Shade ocean with sky configuration
+    vec3 color = shadeOcean(pos, normal, viewDir, iTime, gradient, sky);
     
     // Apply atmospheric fog/haze using the new SkyAtmosphere system
     color = applyAtmosphericFog(color, pos, cam.position, rd, sky, iTime);
