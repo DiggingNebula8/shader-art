@@ -630,46 +630,40 @@ vec3 getDistortedReflectionDir(vec3 reflectedDir, vec3 normal, float roughness, 
 }
 
 // ============================================================================
-// MAIN OCEAN SHADING FUNCTION
+// OCEAN SHADING HELPER FUNCTIONS
 // ============================================================================
 
-vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient, SkyAtmosphere sky) {
-    // Cache lighting evaluation - called once per pixel
-    LightingInfo light = evaluateLighting(sky, time);
-    vec3 sunDir = light.sunDirection;
-    vec3 sunColor = light.sunColor;
-    float sunIntensity = light.sunIntensity;
-    
-    // Use default ocean floor params (inline to avoid function call overhead)
-    OceanFloorParams floorParams;
-    floorParams.baseDepth = -105.0;
-    floorParams.heightVariation = 25.0;
-    floorParams.largeScale = 0.02;
-    floorParams.mediumScale = 0.08;
-    floorParams.smallScale = 0.3;
-    floorParams.largeAmplitude = 0.6;
-    floorParams.mediumAmplitude = 0.3;
-    floorParams.smallAmplitude = 0.1;
-    floorParams.roughness = 0.5;
+struct WaterDepthInfo {
+    float depth;
+    float depthFactor;
+    vec3 waterColor;
+};
+
+WaterDepthInfo calculateWaterDepthAndColor(vec3 pos, vec3 normal, vec3 viewDir, OceanFloorParams floorParams) {
+    WaterDepthInfo info;
     
     float floorHeight = getOceanFloorHeight(pos.xz, floorParams);
-    float depth = max(pos.y - floorHeight, 0.1);
+    info.depth = max(pos.y - floorHeight, 0.1);
     
-    float depthFactor = 1.0 - exp(-depth * 0.05);
-    vec3 waterColor = mix(shallowWaterColor, deepWaterColor, depthFactor);
+    info.depthFactor = 1.0 - exp(-info.depth * 0.05);
+    info.waterColor = mix(shallowWaterColor, deepWaterColor, info.depthFactor);
     
     float viewAngle = 1.0 - max(dot(viewDir, normal), 0.0);
     vec3 angleTint = mix(vec3(1.0), vec3(0.95, 0.97, 1.0), viewAngle * 0.3);
-    waterColor *= angleTint;
+    info.waterColor *= angleTint;
     
+    return info;
+}
+
+vec3 calculateRefractedColor(vec3 pos, vec3 normal, vec3 viewDir, WaterDepthInfo depthInfo, float time, OceanFloorParams floorParams, SkyAtmosphere sky) {
     float eta = AIR_IOR / WATER_IOR;
     vec3 refractedDir = refractRay(-viewDir, normal, eta);
     
     // Cache absorption calculation early (used in multiple places)
-    vec3 baseAbsorption = exp(-waterAbsorption * depth);
+    vec3 baseAbsorption = exp(-waterAbsorption * depthInfo.depth);
     
     vec3 refractedColor = vec3(0.0);
-    float translucencyFactor = 1.0 - smoothstep(3.0, 25.0, depth);
+    float translucencyFactor = 1.0 - smoothstep(3.0, 25.0, depthInfo.depth);
     
     if (dot(refractedDir, normal) < 0.0 && translucencyFactor > 0.01) {
         vec3 rayResult = raymarchThroughWater(pos, refractedDir, time, floorParams);
@@ -680,7 +674,6 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient, 
             vec3 floorPos = pos + refractedDir * waterPathLength;
             vec3 floorNormal = getOceanFloorNormal(floorPos, floorParams);
             
-            // shadeOceanFloor will call evaluateLighting internally (acceptable trade-off for API simplicity)
             vec3 floorColor = shadeOceanFloor(floorPos, -refractedDir, floorNormal, time, floorParams, sky, pos, normal);
             
             vec3 absorption = exp(-waterAbsorption * waterPathLength);
@@ -689,20 +682,23 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient, 
             vec3 waterTint = mix(shallowWaterColor, deepWaterColor, 1.0 - exp(-waterPathLength * 0.04));
             refractedColor = mix(refractedColor, waterTint, 0.25);
         } else {
-            refractedColor = waterColor * baseAbsorption;
+            refractedColor = depthInfo.waterColor * baseAbsorption;
         }
     } else {
-        refractedColor = waterColor * baseAbsorption;
+        refractedColor = depthInfo.waterColor * baseAbsorption;
     }
+    
     if (translucencyFactor < 1.0) {
-        vec3 baseWaterRefracted = waterColor * baseAbsorption;
+        vec3 baseWaterRefracted = depthInfo.waterColor * baseAbsorption;
         refractedColor = mix(baseWaterRefracted, refractedColor, translucencyFactor);
     }
     
+    return refractedColor;
+}
+
+vec3 calculateReflectedColor(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient, SkyAtmosphere sky) {
     float waveHeight = getWaveHeight(pos.xz, time);
     float dynamicRoughness = calculateWaterRoughness(gradient, waveHeight);
-    
-    vec3 F = getFresnel(viewDir, normal);
     
     // Calculate reflection direction once and reuse
     vec3 reflectedDir = reflect(-viewDir, normal);
@@ -750,9 +746,24 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient, 
         reflectedColor = sampleSum / sampleWeight;
     }
     
-    // Cache light calculations
-    vec3 lightDir = sunDir;
-    vec3 lightColor = sunColor * sunIntensity;
+    return reflectedColor;
+}
+
+struct WaterLightingResult {
+    vec3 color;
+    float dynamicRoughness;
+    vec3 reflectedDir;
+};
+
+WaterLightingResult calculateWaterLighting(vec3 pos, vec3 normal, vec3 viewDir, vec3 refractedColor, vec3 reflectedColor, 
+                                          WaterDepthInfo depthInfo, float time, vec2 gradient, SkyAtmosphere sky, LightingInfo light) {
+    WaterLightingResult result;
+    
+    float waveHeight = getWaveHeight(pos.xz, time);
+    result.dynamicRoughness = calculateWaterRoughness(gradient, waveHeight);
+    
+    vec3 F = getFresnel(viewDir, normal);
+    result.reflectedDir = reflect(-viewDir, normal);
     
     vec3 kS = F;
     vec3 kT = vec3(1.0) - F;
@@ -760,6 +771,8 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient, 
     
     vec3 baseColor = mix(refractedColor, reflectedColor, F);
     
+    vec3 lightDir = light.sunDirection;
+    vec3 lightColor = light.sunColor * light.sunIntensity;
     float NdotL = max(dot(normal, lightDir), 0.0);
     
     vec3 ambientDiffuse = vec3(0.0);
@@ -771,17 +784,17 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient, 
     
     vec3 hemisphereAvg = skyUpColor * 0.5;
     
-    vec3 waterAlbedo = mix(shallowWaterColor, deepWaterColor, depthFactor * 0.5);
+    vec3 waterAlbedo = mix(shallowWaterColor, deepWaterColor, depthInfo.depthFactor * 0.5);
     waterAlbedo *= 0.3;
     ambientDiffuse += hemisphereAvg * kD * waterAlbedo * skyUpWeight;
     
     // Reuse reflectedDir calculated earlier for ambient IBL (avoid duplicate calculation)
     vec3 normalReflectedColor = vec3(0.0);
     
-    if (reflectedDir.y > 0.0) {
-        normalReflectedColor = skyColor(reflectedDir, sky, time);
+    if (result.reflectedDir.y > 0.0) {
+        normalReflectedColor = skyColor(result.reflectedDir, sky, time);
         
-        if (dynamicRoughness > baseRoughness * 1.2) {
+        if (result.dynamicRoughness > baseRoughness * 1.2) {
             const int numIBLSamples = 3;
             vec3 sampleSum = normalReflectedColor;
             float sampleWeight = 1.0;
@@ -791,8 +804,8 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient, 
             
             for (int i = 0; i < numIBLSamples; i++) {
                 float angle = float(i) * TAU / float(numIBLSamples) + jitter;
-                vec3 offset = vec3(cos(angle), 0.0, sin(angle)) * dynamicRoughness * 0.1;
-                vec3 sampleDir = normalize(reflectedDir + offset);
+                vec3 offset = vec3(cos(angle), 0.0, sin(angle)) * result.dynamicRoughness * 0.1;
+                vec3 sampleDir = normalize(result.reflectedDir + offset);
                 if (sampleDir.y > 0.0) {
                     vec3 sampleColor = skyColor(sampleDir, sky, time);
                     sampleSum += sampleColor;
@@ -806,37 +819,72 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient, 
     }
     
     // Reuse normalReflectedColor for specular if available, otherwise compute
-    vec3 skySpecularColor = (reflectedDir.y > 0.0 && length(normalReflectedColor) > 0.001) 
+    vec3 skySpecularColor = (result.reflectedDir.y > 0.0 && length(normalReflectedColor) > 0.001) 
         ? normalReflectedColor 
-        : skyColor(reflectedDir, sky, time);
+        : skyColor(result.reflectedDir, sky, time);
     
-    vec3 specular = specularBRDF(normal, viewDir, lightDir, lightColor, dynamicRoughness, skySpecularColor);
+    vec3 specular = specularBRDF(normal, viewDir, lightDir, lightColor, result.dynamicRoughness, skySpecularColor);
     specular *= 1.2;
     
     vec3 diffuse = kD * waterAlbedo * lightColor * NdotL / PI;
     
-    vec3 subsurface = getSubsurfaceScattering(normal, viewDir, lightDir, depth);
+    vec3 subsurface = getSubsurfaceScattering(normal, viewDir, lightDir, depthInfo.depth);
     
     vec3 ambient = ambientDiffuse + ambientSpecular * 0.3;
     
     vec3 waterBase = baseColor + diffuse + subsurface + ambient;
     
-    if (sunDir.y > 0.0 && NdotL > 0.0) {
-        vec3 toSun = normalize(sunDir);
+    if (light.sunDirection.y > 0.0 && NdotL > 0.0) {
+        vec3 toSun = normalize(light.sunDirection);
         float cosTheta = dot(viewDir, toSun);
         float phase = (1.0 - 0.9 * 0.9) / pow(1.0 + 0.9 * 0.9 - 2.0 * 0.9 * cosTheta, 1.5);
         phase /= 4.0 * PI;
         
-        float volumetricFactor = phase * NdotL * (1.0 - exp(-depth * 0.02));
-        vec3 volumetricLight = sunColor * sunIntensity * volumetricFactor * 0.05;
+        float volumetricFactor = phase * NdotL * (1.0 - exp(-depthInfo.depth * 0.02));
+        vec3 volumetricLight = light.sunColor * light.sunIntensity * volumetricFactor * 0.05;
         
-        volumetricLight *= mix(vec3(1.0), shallowWaterColor, 1.0 - depthFactor);
+        volumetricLight *= mix(vec3(1.0), shallowWaterColor, 1.0 - depthInfo.depthFactor);
         waterBase += volumetricLight;
     }
     
-    vec3 color = waterBase + specular;
+    result.color = waterBase + specular;
+    return result;
+}
+
+// ============================================================================
+// MAIN OCEAN SHADING FUNCTION
+// ============================================================================
+
+vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient, SkyAtmosphere sky) {
+    // Cache lighting evaluation - called once per pixel
+    LightingInfo light = evaluateLighting(sky, time);
     
-    return color;
+    // Use default ocean floor params
+    OceanFloorParams floorParams;
+    floorParams.baseDepth = -105.0;
+    floorParams.heightVariation = 25.0;
+    floorParams.largeScale = 0.02;
+    floorParams.mediumScale = 0.08;
+    floorParams.smallScale = 0.3;
+    floorParams.largeAmplitude = 0.6;
+    floorParams.mediumAmplitude = 0.3;
+    floorParams.smallAmplitude = 0.1;
+    floorParams.roughness = 0.5;
+    
+    // Calculate water depth and base color
+    WaterDepthInfo depthInfo = calculateWaterDepthAndColor(pos, normal, viewDir, floorParams);
+    
+    // Calculate refracted color (includes raymarching and floor shading)
+    vec3 refractedColor = calculateRefractedColor(pos, normal, viewDir, depthInfo, time, floorParams, sky);
+    
+    // Calculate reflected color (includes roughness-based sampling)
+    vec3 reflectedColor = calculateReflectedColor(pos, normal, viewDir, time, gradient, sky);
+    
+    // Calculate final lighting (PBR, ambient, specular, diffuse, subsurface, volumetric)
+    WaterLightingResult lighting = calculateWaterLighting(pos, normal, viewDir, refractedColor, reflectedColor, 
+                                                          depthInfo, time, gradient, sky, light);
+    
+    return lighting.color;
 }
 
 // ============================================================================
