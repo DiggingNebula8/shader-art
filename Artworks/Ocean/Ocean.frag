@@ -32,20 +32,7 @@ const vec3 F0_WATER = vec3(0.02);
 // SKY & ATMOSPHERE SYSTEM
 // ============================================================================
 // Comprehensive abstraction for lighting, sky, and atmospheric rendering
-//
-// USAGE:
-//   SkyAtmosphere sky = createSkyPreset_ClearDay();
-//   vec3 skyColor = evaluateSky(sky, dir, time);
-//   LightingInfo light = evaluateLighting(sky, time);
-//   vec3 fogColor = applyAtmosphericFog(color, pos, camPos, rayDir, sky, time);
-//
-// PRESETS:
-//   - createSkyPreset_ClearDay()      // Bright sunny day
-//   - createSkyPreset_Sunset()        // Warm sunset/sunrise
-//   - createSkyPreset_Night()         // Starlit night with moon
-//   - createSkyPreset_CloudyDay()     // Overcast day
-//   - createSkyPreset_Stormy()        // Dark stormy sky
-//   - createSkyPreset_Foggy()         // Foggy/hazy atmosphere
+// See SKY_SYSTEM.md for documentation and usage examples
 // ============================================================================
 
 // --- Lighting Information Structure ---
@@ -572,27 +559,7 @@ float getOceanFloorHeight(vec2 pos, OceanFloorParams params) {
 
 // --- Modular Physically-Based Camera System ---
 // Implements real camera parameters: shutter speed, f-stop, ISO, focal length
-//
-// USAGE:
-//   1. Create a camera: Camera cam = createDefaultCamera();
-//   2. Configure settings: cam.fStop = 2.8; cam.shutterSpeed = 1.0/60.0; cam.iso = 100.0;
-//   3. Use presets: Camera cam = createSunnyDayCamera(); // or createLowLightCamera(), etc.
-//   4. Generate rays: vec3 rd = generateCameraRay(cam, uv, iResolution.xy);
-//   5. Apply exposure: color = applyExposure(color, cam);
-//
-// CAMERA PARAMETERS:
-//   - focalLength: Lens focal length in mm (24mm wide, 50mm standard, 85mm portrait, 200mm telephoto)
-//   - fStop: Aperture f-number (1.4 wide open, 2.8, 5.6, 8, 11, 16, 22 narrow)
-//   - shutterSpeed: Exposure time in seconds (1/60 = 0.0167, 1/250 = 0.004)
-//   - iso: ISO sensitivity (100 low, 400 medium, 800 high, 1600+ very high)
-//   - focusDistance: Distance to focus plane in meters (for depth of field)
-//   - enableDOF: Enable/disable depth of field (performance impact)
-//
-// EXPOSURE RELATIONSHIP:
-//   - Lower f-stop (wider aperture) = brighter image, less depth of field
-//   - Slower shutter = brighter image, more motion blur
-//   - Higher ISO = brighter image, more noise
-//   - Standard exposure: f/2.8, 1/60s, ISO 100
+// See CAMERA_SYSTEM.md for documentation and usage examples
 
 struct Camera {
     // Position and orientation
@@ -2529,36 +2496,6 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     cam.focusDistance = 10.0;
     cam.enableDOF = true; // Set to true for depth of field effect
     
-    // TEST: Uncomment one of these to see dramatic changes:
-    // cam.fStop = 1.4;        // Much brighter (wide aperture)
-    // cam.fStop = 8.0;        // Much darker (narrow aperture)
-    // cam.shutterSpeed = 1.0 / 30.0;  // Brighter (slow shutter)
-    // cam.shutterSpeed = 1.0 / 1000.0; // Darker (fast shutter)
-    // cam.iso = 800.0;        // Brighter (high ISO)
-    // cam.focalLength = 24.0; // Wide angle (more visible)
-    // cam.focalLength = 85.0; // Telephoto (zoomed in)
-    
-    // ============================================================================
-    // SKY SYSTEM USAGE EXAMPLES
-    // ============================================================================
-    // To use custom sky presets, uncomment one of these and use evaluateSky() directly:
-    //
-    // SkyAtmosphere sky = createSkyPreset_ClearDay();      // Bright sunny day
-    // SkyAtmosphere sky = createSkyPreset_Sunset();        // Warm sunset/sunrise
-    // SkyAtmosphere sky = createSkyPreset_Night();         // Starlit night with moon
-    // SkyAtmosphere sky = createSkyPreset_CloudyDay();     // Overcast day
-    // SkyAtmosphere sky = createSkyPreset_Stormy();        // Dark stormy sky
-    // SkyAtmosphere sky = createSkyPreset_Foggy();         // Foggy/hazy atmosphere
-    //
-    // You can also customize a preset:
-    // SkyAtmosphere sky = createSkyPreset_ClearDay();
-    // sky.sunElevation = 0.3;           // Lower sun
-    // sky.cloudDensity = 0.8;           // More clouds
-    // sky.fogDensity = 0.05;            // More fog
-    // sky.horizonGlowIntensity = 1.0;   // Brighter horizon glow
-    //
-    // Then use: vec3 skyColor = evaluateSky(sky, dir, time);
-    // ============================================================================
     
     // Generate camera ray using proper FOV calculation
     // UV coordinates in [0, 1] range
