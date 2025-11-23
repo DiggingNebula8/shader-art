@@ -850,7 +850,7 @@ float calculateFogDensity(vec3 worldPos, vec3 camPos, SkyAtmosphere sky) {
     
     // Distance-based density increase (more fog at horizon/distance)
     float dist = length(worldPos - camPos);
-    float distanceDensityBoost = 1.0 + dist * sky.fog.fogDistanceFalloff;
+    float distanceDensityBoost = 1.0 + min(dist * sky.fog.fogDistanceFalloff, 10.0);
     
     // Apply distance-based density boost
     heightDensity *= distanceDensityBoost;
