@@ -81,6 +81,8 @@ struct SkyAtmosphere {
     float fogDensity;       // Fog density (higher = more fog)
     float fogDistance;      // Fog start distance
     float fogHeightFalloff; // Fog height falloff rate
+    float fogDistanceFalloff; // Fog distance falloff (0 = constant, higher = more fog at distance)
+    float fogHorizonBoost;   // Additional fog density boost at horizon (0-1)
     vec3 fogColor;          // Base fog color
     
     // Advanced Controls
@@ -148,9 +150,11 @@ SkyAtmosphere createDefaultSky() {
     
     // Fog
     sky.enableFog = true;
-    sky.fogDensity = 0.02;
-    sky.fogDistance = 50.0;
-    sky.fogHeightFalloff = 2.0;
+    sky.fogDensity = 0.005;        // Further reduced for very subtle fog
+    sky.fogDistance = 0.0;          // Start immediately (smooth fade-in handled in function)
+    sky.fogHeightFalloff = 8.0;    // Increased further for very smooth height transition
+    sky.fogDistanceFalloff = 0.0008; // Distance-based density increase (more fog at horizon)
+    sky.fogHorizonBoost = 0.3;      // Additional density boost at horizon (30%)
     sky.fogColor = vec3(0.5, 0.6, 0.7);
     
     // Advanced
@@ -169,7 +173,10 @@ SkyAtmosphere createSkyPreset_ClearDay() {
     sky.sunIntensity = 2.5;
     sky.cloudDensity = 0.2;
     sky.cloudCoverage = 0.2;
-    sky.fogDensity = 0.01;
+    sky.fogDensity = 0.004;        // Very subtle fog for clear day
+    sky.fogHeightFalloff = 8.0;    // Smooth falloff
+    sky.fogDistanceFalloff = 0.0006; // Subtle distance increase
+    sky.fogHorizonBoost = 0.2;      // Small horizon boost
     sky.enableStars = false;
     return sky;
 }
@@ -186,7 +193,10 @@ SkyAtmosphere createSkyPreset_Sunset() {
     sky.horizonGlowIntensity = 0.8;
     sky.cloudDensity = 0.6;
     sky.cloudCoverage = 0.5;
-    sky.fogDensity = 0.03;
+    sky.fogDensity = 0.01;        // Moderate fog for sunset
+    sky.fogHeightFalloff = 5.0;
+    sky.fogDistanceFalloff = 0.001; // More fog at distance for sunset
+    sky.fogHorizonBoost = 0.4;      // Strong horizon boost for sunset
     sky.enableStars = false;
     return sky;
 }
@@ -203,7 +213,10 @@ SkyAtmosphere createSkyPreset_Night() {
     sky.starBrightness = 1.0;
     sky.cloudDensity = 0.3;
     sky.cloudCoverage = 0.3;
-    sky.fogDensity = 0.015;
+    sky.fogDensity = 0.006;        // Subtle fog for night
+    sky.fogHeightFalloff = 7.0;
+    sky.fogDistanceFalloff = 0.0005; // Subtle distance increase
+    sky.fogHorizonBoost = 0.15;      // Small horizon boost
     sky.zenithColor = vec3(0.01, 0.015, 0.02);
     sky.horizonColor = vec3(0.05, 0.08, 0.12);
     return sky;
@@ -217,7 +230,10 @@ SkyAtmosphere createSkyPreset_CloudyDay() {
     sky.cloudCoverage = 0.9;
     sky.zenithColor = vec3(0.4, 0.45, 0.5);
     sky.horizonColor = vec3(0.5, 0.5, 0.5);
-    sky.fogDensity = 0.025;
+    sky.fogDensity = 0.01;        // Moderate fog for cloudy day
+    sky.fogHeightFalloff = 6.0;
+    sky.fogDistanceFalloff = 0.0009; // More fog at distance
+    sky.fogHorizonBoost = 0.35;      // Good horizon boost
     sky.enableStars = false;
     return sky;
 }
@@ -232,7 +248,10 @@ SkyAtmosphere createSkyPreset_Stormy() {
     sky.cloudColorDay = vec3(0.3, 0.3, 0.35);
     sky.zenithColor = vec3(0.2, 0.22, 0.25);
     sky.horizonColor = vec3(0.3, 0.3, 0.35);
-    sky.fogDensity = 0.04;
+    sky.fogDensity = 0.015;        // Reduced but still noticeable for stormy
+    sky.fogHeightFalloff = 4.0;    // Lower falloff for more atmospheric effect
+    sky.fogDistanceFalloff = 0.0012; // Strong distance increase for stormy
+    sky.fogHorizonBoost = 0.5;      // Strong horizon boost for dramatic effect
     sky.enableStars = false;
     return sky;
 }
@@ -241,9 +260,11 @@ SkyAtmosphere createSkyPreset_Foggy() {
     SkyAtmosphere sky = createDefaultSky();
     sky.sunElevation = 0.5;
     sky.sunIntensity = 1.2;
-    sky.fogDensity = 0.05;
-    sky.fogDistance = 30.0;
-    sky.fogHeightFalloff = 1.5;
+    sky.fogDensity = 0.012;        // Reduced for smoother appearance
+    sky.fogDistance = 0.0;          // Start immediately with smooth fade
+    sky.fogHeightFalloff = 6.0;    // Increased for smoother height transition
+    sky.fogDistanceFalloff = 0.0015; // Strong distance increase for foggy preset
+    sky.fogHorizonBoost = 0.6;      // Strong horizon boost for foggy effect
     sky.fogColor = vec3(0.7, 0.7, 0.75);
     sky.zenithColor = vec3(0.5, 0.55, 0.6);
     sky.horizonColor = vec3(0.6, 0.6, 0.65);
@@ -791,6 +812,233 @@ vec3 evaluateSky(SkyAtmosphere sky, vec3 dir, float time) {
 // Sky color evaluation - takes SkyAtmosphere as parameter
 vec3 skyColor(vec3 dir, SkyAtmosphere sky, float time) {
     return evaluateSky(sky, dir, time);
+}
+
+// ============================================================================
+// EXPONENTIAL HEIGHT FOG
+// ============================================================================
+// Modern physically-based fog system with volumetric light scattering
+// Based on: Unreal Engine 4/5 Exponential Height Fog
+//          and volumetric fog rendering techniques
+// ============================================================================
+
+// Calculate exponential height fog density at a given world position
+// Uses exponential falloff: density = baseDensity * exp(-(height - fogHeight) / falloff)
+// Smooth and continuous for seamless blending
+// Now includes distance-based density for horizon enhancement
+float calculateFogDensity(vec3 worldPos, vec3 camPos, SkyAtmosphere sky) {
+    if (!sky.enableFog) return 0.0;
+    
+    // Reference height (typically sea level or ground level)
+    const float FOG_HEIGHT = 0.0; // Sea level
+    
+    // Height above reference plane
+    // Use smooth transition to avoid discontinuities
+    float height = worldPos.y - FOG_HEIGHT;
+    
+    // Exponential height fog density
+    // Density decreases exponentially as height increases
+    // Add small offset to ensure smoothness at sea level
+    float heightDensity = sky.fogDensity * exp(-max(height, -1.0) / max(sky.fogHeightFalloff, 0.1));
+    
+    // Smooth transition for heights below sea level (underwater/at ocean surface)
+    if (height < 0.0) {
+        float underwaterFactor = exp(height * 0.5); // Smooth fade below sea level
+        heightDensity *= mix(0.3, 1.0, underwaterFactor); // Reduce fog density underwater
+    }
+    
+    // Distance-based density increase (more fog at horizon/distance)
+    float dist = length(worldPos - camPos);
+    float distanceDensityBoost = 1.0 + dist * sky.fogDistanceFalloff;
+    
+    // Apply distance-based density boost
+    heightDensity *= distanceDensityBoost;
+    
+    // Ensure minimum falloff to prevent division by zero
+    return max(heightDensity, 0.0);
+}
+
+// Calculate volumetric fog transmittance along a ray
+// Uses Beer-Lambert law: T = exp(-integral of density along ray)
+// Optimized with adaptive sampling for smoother results
+float calculateFogTransmittance(vec3 startPos, vec3 endPos, vec3 camPos, SkyAtmosphere sky) {
+    if (!sky.enableFog) return 1.0;
+    
+    vec3 rayDir = normalize(endPos - startPos);
+    float rayLength = length(endPos - startPos);
+    
+    // Adaptive sampling: more samples for longer rays and near surface
+    int numSamples = 8;
+    float heightAtStart = startPos.y;
+    float heightAtEnd = endPos.y;
+    float minHeight = min(heightAtStart, heightAtEnd);
+    
+    // Increase samples near ocean surface for smoother transitions
+    if (abs(minHeight) < 5.0) {
+        numSamples = 12; // More samples near surface
+    }
+    
+    float stepSize = rayLength / float(numSamples);
+    
+    float integratedDensity = 0.0;
+    
+    // Use trapezoidal integration for better accuracy
+    float densityStart = calculateFogDensity(startPos, camPos, sky);
+    float densityEnd = calculateFogDensity(endPos, camPos, sky);
+    integratedDensity = (densityStart + densityEnd) * 0.5 * stepSize;
+    
+    // Sample interior points
+    for (int i = 1; i < numSamples; i++) {
+        float t = float(i) * stepSize;
+        vec3 samplePos = startPos + rayDir * t;
+        
+        float density = calculateFogDensity(samplePos, camPos, sky);
+        integratedDensity += density * stepSize;
+    }
+    
+    // Transmittance (Beer-Lambert law)
+    // Clamp to prevent numerical issues
+    float transmittance = exp(-max(integratedDensity, 0.0));
+    
+    return clamp(transmittance, 0.0, 1.0);
+}
+
+// Calculate volumetric light scattering (god rays) through fog
+// Approximates multiple scattering with single-scattering approximation
+vec3 calculateVolumetricScattering(vec3 startPos, vec3 endPos, vec3 rayDir, vec3 camPos, SkyAtmosphere sky, float time) {
+    if (!sky.enableFog) return vec3(0.0);
+    
+    LightingInfo light = evaluateLighting(sky, time);
+    vec3 sunDir = light.sunDirection;
+    vec3 sunColor = light.sunColor;
+    float sunIntensity = light.sunIntensity;
+    
+    // Only calculate scattering if sun is above horizon
+    if (sunDir.y <= 0.0) return vec3(0.0);
+    
+    float rayLength = length(endPos - startPos);
+    const int NUM_SAMPLES = 6;
+    float stepSize = rayLength / float(NUM_SAMPLES);
+    
+    vec3 scattering = vec3(0.0);
+    
+    for (int i = 0; i < NUM_SAMPLES; i++) {
+        float t = (float(i) + 0.5) * stepSize;
+        vec3 samplePos = startPos + rayDir * t;
+        
+        // Fog density at sample point
+        float density = calculateFogDensity(samplePos, camPos, sky);
+        
+        // Light direction to sun
+        vec3 toSun = normalize(sunDir);
+        float sunDot = max(dot(rayDir, toSun), 0.0);
+        
+        // Henyey-Greenstein phase function for forward scattering
+        // g = 0.7 gives nice forward scattering (god rays)
+        const float g = 0.7;
+        float g2 = g * g;
+        float phase = (1.0 - g2) / pow(1.0 + g2 - 2.0 * g * sunDot, 1.5);
+        phase /= 4.0 * PI;
+        
+        // Transmittance from sun to sample point
+        vec3 sunSamplePos = samplePos - toSun * 1000.0; // Approximate sun position
+        float sunTransmittance = calculateFogTransmittance(sunSamplePos, samplePos, camPos, sky);
+        
+        // Transmittance from sample to camera
+        float camTransmittance = calculateFogTransmittance(samplePos, startPos, camPos, sky);
+        
+        // In-scattering contribution
+        vec3 inScatter = density * phase * sunTransmittance * camTransmittance * sunColor * sunIntensity;
+        scattering += inScatter * stepSize;
+    }
+    
+    // Scale scattering intensity
+    scattering *= 0.15;
+    
+    return scattering;
+}
+
+// Modern Exponential Height Fog with volumetric scattering
+vec3 applyAtmosphericFog(vec3 color, vec3 pos, vec3 camPos, vec3 rayDir, SkyAtmosphere sky, float time) {
+    if (!sky.enableFog) return color;
+    
+    float dist = length(pos - camPos);
+    
+    // Smooth fade-in for fog start distance
+    // Creates gradual fog appearance instead of hard cutoff
+    float fogStartDistance = sky.fogDistance;
+    float fogFadeDistance = 30.0; // Increased fade distance for smoother transition
+    float distanceFade = 1.0;
+    
+    if (fogStartDistance > 0.0) {
+        distanceFade = smoothstep(fogStartDistance, fogStartDistance + fogFadeDistance, dist);
+    }
+    
+    // Early exit if fog hasn't started yet
+    if (distanceFade <= 0.0) return color;
+    
+    // Calculate fog transmittance (how much light passes through fog)
+    float transmittance = calculateFogTransmittance(camPos, pos, camPos, sky);
+    
+    // Fog factor (1.0 = fully fogged, 0.0 = no fog)
+    float fogFactor = 1.0 - transmittance;
+    
+    // Apply distance fade to fog factor for smooth start
+    fogFactor *= distanceFade;
+    
+    // Additional horizon boost for more fog at horizon
+    float horizonAngle = 1.0 - max(rayDir.y, 0.0); // 0 at zenith, 1 at horizon
+    float horizonBoost = pow(horizonAngle, 1.2) * sky.fogHorizonBoost;
+    fogFactor *= (1.0 + horizonBoost);
+    
+    // Base fog color from sky configuration
+    vec3 fogColor = sky.fogColor;
+    
+    // Blend fog color with sky color for better integration
+    // More sky color influence near horizon
+    float horizonFactor = pow(max(0.0, 1.0 - max(rayDir.y, 0.0)), 1.5);
+    vec3 skyFogColor = evaluateSky(sky, rayDir, time);
+    
+    // Mix base fog color with sky color
+    // Horizon gets more sky color, higher elevations get base fog color
+    fogColor = mix(fogColor, skyFogColor, horizonFactor * 0.8);
+    
+    // Smooth transition near ocean surface to prevent seams
+    // Ocean surface is typically around y=0 (with wave variations)
+    // Create smooth blend zone around sea level
+    float oceanHeight = pos.y;
+    float seaLevelBlendZone = 5.0; // Increased height range for blending
+    
+    // Smooth blend factor: 1.0 at sea level, 0.0 far above/below
+    // Use smoother falloff function
+    float seaLevelDistance = abs(oceanHeight);
+    float blendFactor = exp(-seaLevelDistance / seaLevelBlendZone);
+    
+    // Blend fog color towards original color near ocean surface
+    // This prevents visible seams by matching fog to ocean color at the surface
+    // Use a more gradual blend
+    vec3 surfaceFogColor = mix(color, fogColor, 0.8); // Stronger blend with ocean color
+    fogColor = mix(fogColor, surfaceFogColor, blendFactor * 0.5);
+    
+    // Additional smoothness: reduce fog intensity very close to ocean surface
+    // Use smoother falloff
+    float surfaceProximity = exp(-max(seaLevelDistance, 0.0) / 2.0);
+    fogFactor *= mix(1.0, 0.7, surfaceProximity * 0.4); // More gradual reduction near surface
+    
+    // Add volumetric light scattering (god rays)
+    vec3 volumetricScattering = calculateVolumetricScattering(camPos, pos, rayDir, camPos, sky, time);
+    
+    // Apply fog: mix between original color and fog color based on transmittance
+    // Use smoothstep for even smoother blending
+    float smoothFogFactor = smoothstep(0.0, 1.0, fogFactor);
+    vec3 foggedColor = mix(color, fogColor, smoothFogFactor);
+    foggedColor += volumetricScattering * smoothFogFactor * distanceFade;
+    
+    // Ensure we don't go below minimum brightness
+    float minBrightness = 0.02;
+    foggedColor = max(foggedColor, vec3(minBrightness));
+    
+    return foggedColor;
 }
 
 #endif // SKY_SYSTEM_FRAG

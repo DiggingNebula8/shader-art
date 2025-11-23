@@ -874,37 +874,5 @@ vec3 raymarchOcean(vec3 ro, vec3 rd, float time) {
     return ro + rd * MAX_DIST;
 }
 
-// ============================================================================
-// ATMOSPHERIC FOG
-// ============================================================================
-
-vec3 applyAtmosphericFog(vec3 color, vec3 pos, vec3 camPos, vec3 rayDir, SkyAtmosphere sky, float time) {
-    if (!sky.enableFog) return color;
-    
-    float dist = length(pos - camPos);
-    
-    LightingInfo light = evaluateLighting(sky, time);
-    
-    float heightFactor = 1.0;
-    if (sky.fogHeightFalloff > 0.0) {
-        float height = max(pos.y - camPos.y, 0.0);
-        heightFactor = exp(-height / sky.fogHeightFalloff);
-    }
-    
-    float fogDensity = sky.fogDensity * heightFactor;
-    
-    float horizonFactor = pow(max(0.0, 1.0 - max(rayDir.y, 0.0)), 2.0);
-    fogDensity *= (1.0 + horizonFactor * 0.5);
-    
-    float fogFactor = 1.0 - exp(-fogDensity * max(dist - sky.fogDistance, 0.0));
-    
-    vec3 fogColor = sky.fogColor;
-    
-    vec3 skyFogColor = evaluateSky(sky, rayDir, time);
-    fogColor = mix(fogColor, skyFogColor, 0.3);
-    
-    return mix(color, fogColor, fogFactor);
-}
-
 #endif // OCEAN_SYSTEM_FRAG
 

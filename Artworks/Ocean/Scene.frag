@@ -52,6 +52,12 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     // Background - render sky if we didn't hit the ocean
     if (distance > MAX_DIST * 0.95) {
         vec3 bgColor = skyColor(rd, sky, iTime);
+        
+        // Apply fog to background sky for consistency
+        // Use a far point along the ray for fog calculation
+        vec3 farPos = cam.position + rd * MAX_DIST;
+        bgColor = applyAtmosphericFog(bgColor, farPos, cam.position, rd, sky, iTime);
+        
         bgColor = applyExposure(bgColor, cam);
         fragColor = vec4(bgColor, 1.0);
         return;
