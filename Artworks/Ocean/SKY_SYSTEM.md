@@ -82,17 +82,17 @@ SkyAtmosphere sky = createSkyPreset_Foggy();  // Foggy/hazy atmosphere
 
 ## Customizing Presets
 
-You can customize any preset by modifying its properties after creation:
+You can customize any preset by modifying its properties after creation. Note that the `SkyAtmosphere` struct uses nested sub-structs for better organization:
 
 ```glsl
 // Start with a preset
 SkyAtmosphere sky = createSkyPreset_ClearDay();
 
-// Customize properties
-sky.sunElevation = 0.3;           // Lower sun
-sky.cloudDensity = 0.8;            // More clouds
-sky.fogDensity = 0.05;             // More fog
-sky.horizonGlowIntensity = 1.0;    // Brighter horizon glow
+// Customize properties using nested structs
+sky.sunMoon.sunElevation = 0.3;           // Lower sun
+sky.clouds.cloudDensity = 0.8;            // More clouds
+sky.fog.fogDensity = 0.05;                // More fog
+sky.colors.horizonGlowIntensity = 1.0;    // Brighter horizon glow
 
 // Use the customized sky
 vec3 skyColor = evaluateSky(sky, dir, time);
@@ -100,64 +100,88 @@ vec3 skyColor = evaluateSky(sky, dir, time);
 
 ## SkyAtmosphere Structure
 
-### Sun/Moon Configuration
-- `sunRotation`: Sun rotation angle (0 = east, 0.5 = noon, 1 = west)
-- `sunElevation`: Sun elevation (-1 = below horizon, 1 = zenith)
-- `sunColor`: Base sun color (before atmospheric effects)
-- `sunSize`: Sun angular size in radians
-- `sunIntensity`: Sun light intensity multiplier
-- `sunPower`: Sun disk brightness power
-- `enableMoon`: Enable moon rendering
-- `moonRotation`: Moon rotation (typically opposite to sun)
-- `moonElevation`: Moon elevation
-- `moonColor`: Moon color
-- `moonSize`: Moon angular size
-- `moonIntensity`: Moon light intensity
+The `SkyAtmosphere` struct is organized into sub-structs for better maintainability and clarity:
 
-### Atmospheric Scattering
-- `rayleighCoefficient`: Rayleigh scattering strength
-- `rayleighScaleHeight`: Rayleigh scale height in meters
-- `mieCoefficient`: Mie scattering strength
-- `mieScaleHeight`: Mie scale height in meters
-- `mieG`: Mie asymmetry parameter (0.0-1.0)
-- `scatteringScale`: Overall scattering intensity scale
+```glsl
+struct SkyAtmosphere {
+    SunMoonConfig sunMoon;      // Sun and moon configuration
+    ScatteringConfig scattering; // Atmospheric scattering parameters
+    ColorConfig colors;          // Sky colors and gradients
+    CloudConfig clouds;          // Cloud parameters
+    FogConfig fog;              // Fog/atmospheric perspective
+    
+    // Stars (top-level for simplicity)
+    bool enableStars;
+    float starDensity;
+    float starBrightness;
+    float starTwinkle;
+    
+    // Advanced Controls (top-level)
+    float exposure;
+    float contrast;
+    float saturation;
+    float horizonOffset;
+};
+```
 
-### Sky Colors & Gradients
-- `zenithColor`: Sky color at zenith (top)
-- `horizonColor`: Sky color at horizon
-- `nightColor`: Night sky base color
-- `twilightColor`: Twilight/sunset base color
+### Sun/Moon Configuration (`sunMoon`)
+- `sunMoon.sunRotation`: Sun rotation angle (0 = east, 0.5 = noon, 1 = west)
+- `sunMoon.sunElevation`: Sun elevation (-1 = below horizon, 1 = zenith)
+- `sunMoon.sunColor`: Base sun color (before atmospheric effects)
+- `sunMoon.sunSize`: Sun angular size in radians
+- `sunMoon.sunIntensity`: Sun light intensity multiplier
+- `sunMoon.sunPower`: Sun disk brightness power
+- `sunMoon.enableMoon`: Enable moon rendering
+- `sunMoon.moonRotation`: Moon rotation (typically opposite to sun)
+- `sunMoon.moonElevation`: Moon elevation
+- `sunMoon.moonColor`: Moon color
+- `sunMoon.moonSize`: Moon angular size
+- `sunMoon.moonIntensity`: Moon light intensity
 
-### Horizon Glow
-- `horizonGlowColor`: Horizon glow color
-- `horizonGlowIntensity`: Horizon glow strength
-- `horizonGlowPower`: Horizon glow falloff power
+### Atmospheric Scattering (`scattering`)
+- `scattering.rayleighCoefficient`: Rayleigh scattering strength
+- `scattering.rayleighScaleHeight`: Rayleigh scale height in meters
+- `scattering.mieCoefficient`: Mie scattering strength
+- `scattering.mieScaleHeight`: Mie scale height in meters
+- `scattering.mieG`: Mie asymmetry parameter (0.0-1.0)
+- `scattering.scatteringScale`: Overall scattering intensity scale
 
-### Stars
+### Sky Colors & Gradients (`colors`)
+- `colors.zenithColor`: Sky color at zenith (top)
+- `colors.horizonColor`: Sky color at horizon
+- `colors.nightColor`: Night sky base color
+- `colors.twilightColor`: Twilight/sunset base color
+- `colors.horizonGlowColor`: Horizon glow color
+- `colors.horizonGlowIntensity`: Horizon glow strength
+- `colors.horizonGlowPower`: Horizon glow falloff power
+
+### Stars (top-level)
 - `enableStars`: Enable star field
 - `starDensity`: Star field density (0.0-1.0)
 - `starBrightness`: Star brightness multiplier
 - `starTwinkle`: Star twinkle amount (0.0-1.0)
 
-### Clouds
-- `enableClouds`: Enable volumetric clouds
-- `cloudDensity`: Overall cloud density (0.0-1.0)
-- `cloudHeight`: Cloud layer height in meters
-- `cloudThickness`: Cloud layer thickness in meters
-- `cloudCoverage`: Cloud coverage amount (0.0-1.0)
-- `cloudColorDay`: Cloud color during day
-- `cloudColorSunset`: Cloud color during sunset
-- `cloudColorNight`: Cloud color during night
-- `cloudWindSpeed`: Cloud animation speed
+### Clouds (`clouds`)
+- `clouds.enableClouds`: Enable volumetric clouds
+- `clouds.cloudDensity`: Overall cloud density (0.0-1.0)
+- `clouds.cloudHeight`: Cloud layer height in meters
+- `clouds.cloudThickness`: Cloud layer thickness in meters
+- `clouds.cloudCoverage`: Cloud coverage amount (0.0-1.0)
+- `clouds.cloudColorDay`: Cloud color during day
+- `clouds.cloudColorSunset`: Cloud color during sunset
+- `clouds.cloudColorNight`: Cloud color during night
+- `clouds.cloudWindSpeed`: Cloud animation speed
 
-### Fog/Atmospheric Perspective
-- `enableFog`: Enable atmospheric fog
-- `fogDensity`: Fog density (higher = more fog)
-- `fogDistance`: Fog start distance
-- `fogHeightFalloff`: Fog height falloff rate
-- `fogColor`: Base fog color
+### Fog/Atmospheric Perspective (`fog`)
+- `fog.enableFog`: Enable atmospheric fog
+- `fog.fogDensity`: Fog density (higher = more fog)
+- `fog.fogDistance`: Fog start distance
+- `fog.fogHeightFalloff`: Fog height falloff rate
+- `fog.fogDistanceFalloff`: Fog distance falloff (0 = constant, higher = more fog at distance)
+- `fog.fogHorizonBoost`: Additional fog density boost at horizon (0-1)
+- `fog.fogColor`: Base fog color
 
-### Advanced Controls
+### Advanced Controls (top-level)
 - `exposure`: Overall sky exposure adjustment
 - `contrast`: Sky contrast (1.0 = default)
 - `saturation`: Sky color saturation (1.0 = default)
@@ -193,11 +217,11 @@ vec3 bgColor = skyColor(rayDir, sky, iTime);
 // Start with sunset preset
 SkyAtmosphere sky = createSkyPreset_Sunset();
 
-// Enhance the sunset effect
-sky.sunElevation = 0.05;              // Very low sun
-sky.horizonGlowIntensity = 1.2;        // Stronger glow
-sky.horizonGlowColor = vec3(1.0, 0.4, 0.1);  // More orange
-sky.cloudCoverage = 0.7;               // More clouds for dramatic effect
+// Enhance the sunset effect using nested structs
+sky.sunMoon.sunElevation = 0.05;                    // Very low sun
+sky.colors.horizonGlowIntensity = 1.2;               // Stronger glow
+sky.colors.horizonGlowColor = vec3(1.0, 0.4, 0.1);  // More orange
+sky.clouds.cloudCoverage = 0.7;                      // More clouds for dramatic effect
 
 // Use it
 vec3 skyColor = evaluateSky(sky, dir, time);
@@ -211,12 +235,12 @@ float dayTime = sin(iTime * 0.1) * 0.5 + 0.5;  // 0 = night, 1 = day
 SkyAtmosphere daySky = createSkyPreset_ClearDay();
 SkyAtmosphere nightSky = createSkyPreset_Night();
 
-// Mix sky configurations
+// Mix sky configurations using nested structs
 SkyAtmosphere sky;
-sky.sunElevation = mix(nightSky.sunElevation, daySky.sunElevation, dayTime);
-sky.sunIntensity = mix(nightSky.sunIntensity, daySky.sunIntensity, dayTime);
-sky.zenithColor = mix(nightSky.zenithColor, daySky.zenithColor, dayTime);
-sky.horizonColor = mix(nightSky.horizonColor, daySky.horizonColor, dayTime);
+sky.sunMoon.sunElevation = mix(nightSky.sunMoon.sunElevation, daySky.sunMoon.sunElevation, dayTime);
+sky.sunMoon.sunIntensity = mix(nightSky.sunMoon.sunIntensity, daySky.sunMoon.sunIntensity, dayTime);
+sky.colors.zenithColor = mix(nightSky.colors.zenithColor, daySky.colors.zenithColor, dayTime);
+sky.colors.horizonColor = mix(nightSky.colors.horizonColor, daySky.colors.horizonColor, dayTime);
 sky.enableStars = dayTime < 0.3;  // Stars visible at night
 
 vec3 skyColor = evaluateSky(sky, dir, iTime);

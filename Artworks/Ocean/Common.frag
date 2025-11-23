@@ -57,6 +57,9 @@ float smoothNoise(vec2 p) {
 
 // Fractal noise (fBm - fractional Brownian motion)
 float fractalNoise(vec2 p, float scale, int octaves, float persistence) {
+    if (octaves <= 0) {
+        return 0.0;
+    }
     float value = 0.0;
     float amplitude = 1.0;
     float frequency = scale;
@@ -69,7 +72,7 @@ float fractalNoise(vec2 p, float scale, int octaves, float persistence) {
         frequency *= 2.0;
     }
     
-    return value / maxValue; // Normalize to [0, 1]
+    return value / max(maxValue, 1e-6); // Normalize to [0, 1]
 }
 
 #endif // COMMON_FRAG

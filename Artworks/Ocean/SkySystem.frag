@@ -484,7 +484,7 @@ vec3 cloudColor(vec3 dir, vec3 sunDir, float sunIntensity, float sunElevation, f
         baseColor = vec3(0.15, 0.15, 0.18);
     } else if (sunElevation < 0.2) {
         // Sunrise/sunset: warm colored clouds
-        float sunsetFactor = smoothstep(0.2, 0.0, sunElevation);
+        float sunsetFactor = 1.0 - smoothstep(0.0, 0.2, sunElevation);
         baseColor = mix(vec3(0.85, 0.8, 0.75), vec3(0.9, 0.6, 0.4), sunsetFactor);
     } else {
         // Day: white/bright clouds
@@ -591,7 +591,7 @@ vec3 evaluateSunMoonDisk(SkyAtmosphere sky, vec3 dir, LightingInfo light) {
         float moonDisk = 1.0 - smoothstep(0.0, sky.sunMoon.moonSize, moonAngle);
         
         // Moon fades as sun rises
-        float moonFade = smoothstep(0.2, -0.2, light.sunElevation);
+        float moonFade = 1.0 - smoothstep(-0.2, 0.2, light.sunElevation);
         vec3 moon = light.moonColor * moonDisk * light.moonElevation * 
                    2.0 * moonFade * light.moonIntensity;
         
@@ -627,7 +627,7 @@ vec3 evaluateStars(SkyAtmosphere sky, vec3 dir, LightingInfo light) {
     }
     
     // Star visibility based on sun elevation (stars fade as sun rises)
-    float starVisibility = smoothstep(0.2, -0.2, light.sunElevation);
+    float starVisibility = 1.0 - smoothstep(-0.2, 0.2, light.sunElevation);
     float horizonFade = smoothstep(0.0, 0.2, elevation);
     
     vec3 starColor = vec3(1.0, 0.98, 0.95) * star * starVisibility * 
@@ -714,7 +714,7 @@ vec3 evaluateCloudColor(SkyAtmosphere sky, vec3 dir, LightingInfo light, float t
     if (light.sunElevation < 0.0) {
         baseColor = sky.clouds.cloudColorNight;
     } else if (light.sunElevation < 0.2) {
-        float sunsetFactor = smoothstep(0.2, 0.0, light.sunElevation);
+        float sunsetFactor = 1.0 - smoothstep(0.0, 0.2, light.sunElevation);
         baseColor = mix(sky.clouds.cloudColorDay, sky.clouds.cloudColorSunset, sunsetFactor);
     } else {
         baseColor = sky.clouds.cloudColorDay;
@@ -745,7 +745,7 @@ vec3 evaluateSky(SkyAtmosphere sky, vec3 dir, float time) {
     vec3 diskColor = evaluateSunMoonDisk(sky, safeDir, light);
     
     // Base sky colors (time-of-day dependent)
-    float deepNightFactor = smoothstep(-0.2, -0.3, light.sunElevation);
+    float deepNightFactor = smoothstep(-0.3, -0.2, light.sunElevation);
     float twilightProgress = smoothstep(-0.2, 0.2, light.sunElevation);
     float dayFactor = smoothstep(0.1, 0.2, light.sunElevation);
     

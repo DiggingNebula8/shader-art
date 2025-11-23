@@ -122,7 +122,8 @@ Camera cam = createCinematicCamera();
 
 The exposure system follows real photographic principles:
 
-- **Lower f-stop** (wider aperture) = brighter image, less depth of field
+- **Lower f-stop** (wider aperture) = brighter image, less depth of field (more blur)
+- **Higher f-stop** (smaller aperture) = darker image, more depth of field (less blur)
 - **Slower shutter** = brighter image, more motion blur
 - **Higher ISO** = brighter image, more noise
 
@@ -132,6 +133,8 @@ Each parameter affects exposure multiplicatively:
 - Each f-stop change doubles/halves light (f/1.4, f/2, f/2.8, f/4, f/5.6, f/8, f/11, f/16, f/22)
 - Each shutter speed change doubles/halves light (1/1000, 1/500, 1/250, 1/125, 1/60, 1/30, 1/15)
 - Each ISO change doubles/halves sensitivity (100, 200, 400, 800, 1600)
+
+**Depth of Field Note**: The DOF system correctly implements the inverse relationship between f-stop and blur amount. Larger f-stop numbers (like f/8, f/16) produce sharper images with more depth of field, while smaller f-stop numbers (like f/1.4, f/2.8) produce more blur with shallow depth of field.
 
 ## Functions
 
@@ -154,7 +157,7 @@ Calculates the exposure multiplier from camera settings. Returns a value typical
 Calculates field of view in radians from focal length and sensor size.
 
 ### `calculateCircleOfConfusion(Camera cam, float distance)`
-Calculates circle of confusion radius for depth of field calculations.
+Calculates circle of confusion radius for depth of field calculations. The function implements the correct physical relationship where **larger f-stop values (smaller aperture) produce less blur** (more depth of field), matching real-world camera behavior.
 
 ## Examples
 

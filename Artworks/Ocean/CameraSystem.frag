@@ -120,7 +120,7 @@ float calculateExposure(Camera cam) {
     
     // Shutter speed contribution (longer = more light)
     // 1/30s = 2x brighter than 1/60s, 1/125s = 2x darker than 1/60s
-    float shutterFactor = (1.0 / 60.0) / cam.shutterSpeed;
+    float shutterFactor = cam.shutterSpeed / (1.0 / 60.0);
     
     // ISO contribution (higher = more sensitive = brighter)
     // ISO 200 = 2x brighter than ISO 100, ISO 50 = 2x darker than ISO 100
@@ -169,14 +169,15 @@ float calculateCircleOfConfusion(Camera cam, float distance) {
 // Returns: (right, up, forward) basis vectors
 mat3 buildCameraBasis(Camera cam) {
     vec3 forward = normalize(cam.target - cam.position);
-    vec3 right = normalize(cross(cam.up, forward));
-    vec3 up = normalize(cross(forward, right));
     
-    // Handle degenerate case (looking straight up/down)
+    // Build an unnormalized right vector first to safely detect degeneracy
+    vec3 right = cross(cam.up, forward);
     if (length(right) < 0.001) {
-        right = vec3(1.0, 0.0, 0.0);
-        up = normalize(cross(forward, right));
+        // Fallback when up ≈ forward (looking straight up/down)
+        right = cross(vec3(1.0, 0.0, 0.0), forward);
     }
+    right = normalize(right);
+    vec3 up = normalize(cross(forward, right));
     
     return mat3(right, up, forward);
 }

@@ -80,7 +80,12 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
         vec3 farPos = cam.position + rd * MAX_DIST;
         bgColor = applyAtmosphericFog(bgColor, farPos, cam.position, rd, sky, iTime);
         
+        // Camera exposure + optional DOF + tone mapping + gamma, same as ocean path
         bgColor = applyExposure(bgColor, cam);
+        bgColor = applyDepthOfField(bgColor, distance, cam);
+        bgColor = toneMapReinhardJodie(bgColor);
+        bgColor = pow(bgColor, vec3(1.0 / 2.2));
+        
         fragColor = vec4(bgColor, 1.0);
         return;
     }
