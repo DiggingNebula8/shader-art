@@ -881,8 +881,29 @@ vec3 skyColor(vec3 dir, float time) {
     // This ensures the sky is bright during day time
     vec3 baseSkyBrightness;
     if (sunElevation < 0.0) {
-        // Night: very dim
-        baseSkyBrightness = vec3(0.01, 0.015, 0.02) * (1.0 - rayleighTransmittance);
+        // Night: add moon/starlight illumination
+        // Moon is opposite to sun (180 degrees away)
+        vec3 moonDir = normalize(vec3(-sunDir.x, -sunDir.y, -sunDir.z));
+        float moonElevation = moonDir.y;
+        
+        // Moonlight contribution (brighter when moon is higher)
+        float moonBrightness = 0.0;
+        if (moonElevation > 0.0) {
+            moonBrightness = pow(moonElevation, 0.5) * 0.3; // Moon provides some light
+        }
+        
+        // Base night sky (starlight + moonlight)
+        // Dark blue/purple, brighter near horizon due to atmospheric glow
+        vec3 nightSkyBase = vec3(0.02, 0.03, 0.05);
+        vec3 moonlitSky = vec3(0.05, 0.06, 0.08) * moonBrightness;
+        
+        // Night sky gets slightly brighter at zenith (less atmosphere)
+        float nightGradient = mix(0.8, 1.2, pow(elevation, 0.3));
+        baseSkyBrightness = (nightSkyBase + moonlitSky) * nightGradient;
+        
+        // Add atmospheric glow near horizon
+        float horizonGlow = pow(max(0.0, 1.0 - elevation), 2.0);
+        baseSkyBrightness += vec3(0.01, 0.015, 0.02) * horizonGlow;
     } else if (sunElevation < 0.1) {
         // Twilight: moderate
         float twilightFactor = smoothstep(0.0, 0.1, sunElevation);
@@ -903,8 +924,22 @@ vec3 skyColor(vec3 dir, float time) {
     // Scale ambient to be visible
     vec3 ambientSky = BETA_R * 2000.0 * (1.0 - rayleighTransmittance);
     if (sunElevation < 0.0) {
-        // Night time: add subtle blue ambient from starlight/moonlight
-        ambientSky += vec3(0.01, 0.02, 0.04) * (1.0 - rayleighTransmittance.b) * 0.5;
+        // Night time: add ambient from starlight/moonlight
+        // Moon position (opposite to sun)
+        vec3 moonDir = normalize(vec3(-sunDir.x, -sunDir.y, -sunDir.z));
+        float moonElevation = moonDir.y;
+        
+        // Moonlight ambient (brighter when moon is visible)
+        float moonAmbient = 0.0;
+        if (moonElevation > 0.0) {
+            moonAmbient = pow(moonElevation, 0.3) * 0.4;
+        }
+        
+        // Starlight ambient (always present, but dim)
+        vec3 starlightAmbient = vec3(0.02, 0.03, 0.05) * (1.0 - rayleighTransmittance.b);
+        vec3 moonlightAmbient = vec3(0.03, 0.04, 0.06) * moonAmbient;
+        
+        ambientSky += starlightAmbient + moonlightAmbient;
     }
     sky += ambientSky;
     
@@ -913,9 +948,18 @@ vec3 skyColor(vec3 dir, float time) {
     float horizonGlowIntensity;
     
     if (sunElevation < 0.0) {
-        // Night: subtle blue/purple glow
-        horizonGlowColor = vec3(0.1, 0.15, 0.25);
-        horizonGlowIntensity = 0.2;
+        // Night: subtle blue/purple glow (brighter to prevent pitch black)
+        // Moon position for moonlit horizon
+        vec3 moonDir = normalize(vec3(-sunDir.x, -sunDir.y, -sunDir.z));
+        float moonElevation = moonDir.y;
+        
+        float moonGlow = 0.0;
+        if (moonElevation > 0.0) {
+            moonGlow = pow(moonElevation, 0.4) * 0.3;
+        }
+        
+        horizonGlowColor = mix(vec3(0.1, 0.15, 0.25), vec3(0.15, 0.2, 0.3), moonGlow);
+        horizonGlowIntensity = 0.3 + moonGlow * 0.2; // Brighter with moon
     } else if (sunElevation < 0.2) {
         // Sunrise/sunset: warm orange/red glow
         float sunsetFactor = smoothstep(0.2, 0.0, sunElevation);
@@ -963,13 +1007,42 @@ vec3 skyColor(vec3 dir, float time) {
     vec3 finalSky = sky + sun + halo;
     
     // Add star field for night sky
-    if (sunElevation < 0.1 && elevation > 0.1) {
+    if (sunElevation < 0.15 && elevation > 0.05) {
         float starBrightness = stars(safeDir);
-        // Fade stars near horizon and during twilight
-        float starVisibility = smoothstep(0.0, 0.1, sunElevation) * 
-                               smoothstep(0.0, 0.3, elevation);
-        vec3 starColor = vec3(1.0, 0.98, 0.95) * starBrightness * starVisibility;
+        
+        // Star visibility: brightest during deep night, fade during twilight
+        float deepNightFactor = smoothstep(0.15, -0.2, sunElevation); // Brighter when sun is lower
+        float horizonFade = smoothstep(0.0, 0.2, elevation); // Fade near horizon
+        
+        // Stars are more visible when sun is far below horizon
+        float starVisibility = deepNightFactor * horizonFade;
+        
+        vec3 starColor = vec3(1.0, 0.98, 0.95) * starBrightness * starVisibility * 0.8;
         finalSky += starColor;
+    }
+    
+    // Add moon disk for night sky
+    if (sunElevation < 0.0) {
+        vec3 moonDir = normalize(vec3(-sunDir.x, -sunDir.y, -sunDir.z));
+        float moonElevation = moonDir.y;
+        
+        if (moonElevation > 0.0) {
+            float moonDot = max(dot(safeDir, moonDir), 0.0);
+            float moonAngle = acos(clamp(moonDot, 0.0, 1.0));
+            
+            const float MOON_ANGULAR_SIZE = 0.0093; // Same as sun
+            float moonDisk = 1.0 - smoothstep(0.0, MOON_ANGULAR_SIZE, moonAngle);
+            
+            // Moon color (cool white/blue)
+            vec3 moonColor = vec3(0.9, 0.92, 0.95);
+            vec3 moon = moonColor * moonDisk * moonElevation * 2.0;
+            
+            // Moon halo (subtle)
+            float moonHalo = pow(max(0.0, moonDot), 20.0);
+            vec3 moonHaloColor = moonColor * moonHalo * moonElevation * 0.3;
+            
+            finalSky += moon + moonHaloColor;
+        }
     }
     
     // Add volumetric clouds
@@ -990,12 +1063,26 @@ vec3 skyColor(vec3 dir, float time) {
     // Time-of-day dependent minimum brightness (safety net, shouldn't be needed with proper scattering)
     vec3 minSkyBrightness;
     if (sunElevation < 0.0) {
-        // Night: very dark but not black
-        minSkyBrightness = vec3(0.005, 0.01, 0.02);
+        // Night: ensure minimum brightness from starlight/moonlight
+        // Moon position (opposite to sun)
+        vec3 moonDir = normalize(vec3(-sunDir.x, -sunDir.y, -sunDir.z));
+        float moonElevation = moonDir.y;
+        
+        // Base starlight minimum (always present)
+        vec3 starlightMin = vec3(0.015, 0.02, 0.03);
+        
+        // Moonlight minimum (when moon is visible)
+        vec3 moonlightMin = vec3(0.0);
+        if (moonElevation > 0.0) {
+            moonlightMin = vec3(0.02, 0.025, 0.035) * pow(moonElevation, 0.3);
+        }
+        
+        // Combine: never completely black
+        minSkyBrightness = starlightMin + moonlightMin;
     } else if (sunElevation < 0.1) {
         // Twilight: dim
         float twilightFactor = smoothstep(0.0, 0.1, sunElevation);
-        minSkyBrightness = mix(vec3(0.01, 0.02, 0.03), vec3(0.1, 0.15, 0.2), twilightFactor);
+        minSkyBrightness = mix(vec3(0.02, 0.03, 0.04), vec3(0.1, 0.15, 0.2), twilightFactor);
     } else {
         // Day: ensure minimum brightness (should already be bright from base sky)
         minSkyBrightness = vec3(0.2, 0.3, 0.4);
