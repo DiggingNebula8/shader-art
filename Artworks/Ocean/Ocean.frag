@@ -61,14 +61,95 @@ float getWaveSpeed(float k) {
     return sqrt(GRAVITY * k) * TIME_SCALE;
 }
 
-// Lighting Configuration
-const vec3 sunDir = normalize(vec3(0.2, 0.8, 0.4));
-const vec3 sunColor = vec3(1.0, 0.98, 0.95);
-const float sunIntensity = 2.5;
+// --- Time of Day System ---
+// Controls sun position and sky appearance throughout the day
+// timeOfDay: 0.0 = midnight, 0.25 = sunrise, 0.5 = noon, 0.75 = sunset, 1.0 = midnight
+
+// Get time of day from iTime (24-hour cycle, adjustable)
+// Use iTime directly or create a cycle: mod(iTime / 60.0, 1.0) for 60-second day cycle
+float getTimeOfDay(float time) {
+    // Create a day cycle (adjust divisor to change speed)
+    // 120.0 = 2 minute day cycle, 60.0 = 1 minute, etc.
+    return mod(time / 120.0, 1.0);
+}
+
+// Calculate sun position based on time of day
+// Returns normalized sun direction (y-component is elevation)
+vec3 getSunDirection(float timeOfDay) {
+    // Sun path: rises in east (x=-1), sets in west (x=+1)
+    // Elevation: -1 (below horizon) to 1 (zenith)
+    float sunAngle = timeOfDay * TAU - PI * 0.5; // Start at -90° (sunrise)
+    float elevation = sin(sunAngle); // -1 to 1
+    float azimuth = cos(sunAngle); // East to West
+    
+    // Sun moves from east (-1) to west (+1) as time progresses
+    // At noon (timeOfDay=0.5), sun is at zenith (elevation=1, azimuth=0)
+    vec3 sunDir = normalize(vec3(azimuth * 0.8, elevation, -azimuth * 0.6));
+    
+    return sunDir;
+}
+
+// Get sun color based on elevation (redder at horizon due to atmospheric scattering)
+vec3 getSunColorFromElevation(float sunElevation) {
+    // Base sun color (white/yellow)
+    vec3 baseColor = vec3(1.0, 0.98, 0.95);
+    
+    // Sunset/sunrise colors (red/orange)
+    vec3 sunsetColor = vec3(1.0, 0.6, 0.3);
+    
+    // Night color (blue/magenta for moon)
+    vec3 nightColor = vec3(0.3, 0.4, 0.6);
+    
+    // Blend based on elevation
+    if (sunElevation < 0.0) {
+        // Below horizon - night time
+        float nightFactor = smoothstep(-0.3, 0.0, sunElevation);
+        return mix(nightColor, sunsetColor, nightFactor);
+    } else if (sunElevation < 0.3) {
+        // Near horizon - sunset/sunrise
+        float sunsetFactor = smoothstep(0.3, 0.0, sunElevation);
+        return mix(baseColor, sunsetColor, sunsetFactor);
+    } else {
+        // Above horizon - day time
+        return baseColor;
+    }
+}
+
+// Get sun intensity based on elevation
+float getSunIntensityFromElevation(float sunElevation) {
+    if (sunElevation < 0.0) {
+        // Below horizon - very dim (moonlight)
+        return 0.1 * smoothstep(-0.3, 0.0, sunElevation);
+    } else if (sunElevation < 0.1) {
+        // Near horizon - dim (sunrise/sunset)
+        return 1.0 + sunElevation * 15.0;
+    } else {
+        // Above horizon - full intensity
+        return 2.5;
+    }
+}
+
+// Lighting Configuration (now dynamic)
+vec3 getSunDir(float time) {
+    float tod = getTimeOfDay(time);
+    return getSunDirection(tod);
+}
+
+vec3 getSunColor(float time) {
+    float tod = getTimeOfDay(time);
+    vec3 sunDir = getSunDirection(tod);
+    return getSunColorFromElevation(sunDir.y);
+}
+
+float getSunIntensity(float time) {
+    float tod = getTimeOfDay(time);
+    vec3 sunDir = getSunDirection(tod);
+    return getSunIntensityFromElevation(sunDir.y);
+}
 
 // Water Properties
 const vec3 waterAbsorption = vec3(0.15, 0.045, 0.015); // m^-1 (realistic values)
-const float roughness = 0.005; // Very smooth ocean surface
+const float roughness = 0.02; // Very smooth ocean surface
 
 // Water Colors
 const vec3 deepWaterColor = vec3(0.0, 0.15, 0.3);
@@ -256,18 +337,25 @@ float getOpticalDepth(vec3 dir, float scaleHeight) {
     return scaleHeight / elevation;
 }
 
-// Physically-based sky color with atmospheric scattering
-vec3 skyColor(vec3 dir) {
+// Enhanced physically-based sky color with time-of-day support
+// Based on: Preetham et al. "A Practical Analytic Model for Daylight"
+//          and improved atmospheric scattering with proper day/night transitions
+vec3 skyColor(vec3 dir, float time) {
+    // Get dynamic sun properties based on time
+    vec3 sunDir = getSunDir(time);
+    vec3 sunColor = getSunColor(time);
+    float sunIntensity = getSunIntensity(time);
+    
     // Clamp direction to prevent sampling below horizon
     vec3 safeDir = normalize(vec3(dir.x, max(dir.y, 0.01), dir.z));
     
     float sunDot = max(dot(safeDir, sunDir), 0.0);
-    float sunElevation = max(sunDir.y, 0.01);
+    float sunElevation = sunDir.y;
     
     // Elevation angle (0 = horizon, 1 = zenith)
     float elevation = safeDir.y;
     
-    // Optical depth - how much atmosphere light travels through
+    // Enhanced optical depth calculation with better horizon handling
     float rayleighDepth = getOpticalDepth(safeDir, RAYLEIGH_SCALE_HEIGHT);
     float mieDepth = getOpticalDepth(safeDir, MIE_SCALE_HEIGHT);
     float sunRayleighDepth = getOpticalDepth(sunDir, RAYLEIGH_SCALE_HEIGHT);
@@ -290,56 +378,90 @@ vec3 skyColor(vec3 dir) {
     vec3 rayleighInScatter = BETA_R * rayleighPhaseValue * sunRayleighTransmittance;
     float mieInScatter = BETA_M * miePhaseValue * sunMieTransmittance;
     
-    // Sky color from scattered sunlight
+    // Sky color from scattered sunlight (enhanced with time-of-day)
     vec3 sky = (rayleighInScatter + vec3(mieInScatter)) * sunColor * sunIntensity * 2.0;
     
     // Add ambient sky light (scattered from all directions)
+    // Enhanced for night time with subtle blue glow
     vec3 ambientSky = BETA_R * 0.5 * (1.0 - rayleighTransmittance);
+    if (sunElevation < 0.0) {
+        // Night time: add subtle blue ambient from starlight/moonlight
+        ambientSky += vec3(0.01, 0.02, 0.04) * (1.0 - rayleighTransmittance.b) * 0.5;
+    }
     sky += ambientSky;
     
-    // Horizon glow: more scattering near horizon creates warm glow
-    const vec3 HORIZON_GLOW_COLOR = vec3(1.0, 0.75, 0.6); // Warm sunset colors
-    const float HORIZON_GLOW_INTENSITY = 0.4;
-    float horizonFactor = pow(max(0.0, 1.0 - elevation), 1.5);
-    float horizonIntensity = horizonFactor * (1.0 - rayleighTransmittance.r) * HORIZON_GLOW_INTENSITY;
-    sky += HORIZON_GLOW_COLOR * horizonIntensity;
+    // Enhanced horizon glow with time-of-day variation
+    vec3 horizonGlowColor;
+    float horizonGlowIntensity;
     
-    // Apply transmittance for distance
+    if (sunElevation < 0.0) {
+        // Night: subtle blue/purple glow
+        horizonGlowColor = vec3(0.1, 0.15, 0.25);
+        horizonGlowIntensity = 0.2;
+    } else if (sunElevation < 0.2) {
+        // Sunrise/sunset: warm orange/red glow
+        float sunsetFactor = smoothstep(0.2, 0.0, sunElevation);
+        horizonGlowColor = mix(vec3(1.0, 0.75, 0.6), vec3(1.0, 0.5, 0.2), sunsetFactor);
+        horizonGlowIntensity = 0.6 * (1.0 - sunsetFactor * 0.5);
+    } else {
+        // Day: subtle warm glow
+        horizonGlowColor = vec3(1.0, 0.85, 0.7);
+        horizonGlowIntensity = 0.3;
+    }
+    
+    float horizonFactor = pow(max(0.0, 1.0 - elevation), 1.5);
+    float horizonIntensity = horizonFactor * (1.0 - rayleighTransmittance.r) * horizonGlowIntensity;
+    sky += horizonGlowColor * horizonIntensity;
+    
+    // Apply transmittance for distance (atmospheric perspective)
     sky *= mix(vec3(1.0), rayleighTransmittance * mieTransmittance, 0.7);
     
-    // Sun disk - bright when looking directly at sun
+    // Enhanced sun disk with time-of-day variation
     const float SUN_ANGULAR_SIZE = 0.0093; // ~0.53 degrees in radians
-    const float SUN_DISK_BRIGHTNESS = 30.0;
+    const float SUN_DISK_BRIGHTNESS_DAY = 30.0;
+    const float SUN_DISK_BRIGHTNESS_NIGHT = 5.0; // Moon
     const float SUN_HALO_POWER = 16.0;
-    const float SUN_HALO_INTENSITY = 3.0;
-    const float SUNSET_ELEVATION_THRESHOLD = 0.4;
-    const vec3 SUNSET_COLOR = vec3(1.0, 0.6, 0.3);
+    const float SUN_HALO_INTENSITY_DAY = 3.0;
+    const float SUN_HALO_INTENSITY_NIGHT = 0.5;
     
     float sunAngle = acos(clamp(sunDot, 0.0, 1.0));
     float sunDisk = 1.0 - smoothstep(0.0, SUN_ANGULAR_SIZE, sunAngle);
     
-    // Sun color varies with elevation (redder at horizon due to more scattering)
-    vec3 sunDiskColor = sunColor;
-    if (sunElevation < SUNSET_ELEVATION_THRESHOLD) {
-        // Sunset/sunrise: redder sun (more atmosphere = more red scattering)
-        float sunsetFactor = smoothstep(SUNSET_ELEVATION_THRESHOLD, 0.1, sunElevation);
-        sunDiskColor = mix(sunColor, SUNSET_COLOR, sunsetFactor);
-    }
+    // Sun/moon disk brightness varies with time of day
+    float sunDiskBrightness = mix(SUN_DISK_BRIGHTNESS_NIGHT, SUN_DISK_BRIGHTNESS_DAY, 
+                                   smoothstep(-0.1, 0.1, sunElevation));
+    vec3 sun = sunColor * sunDisk * sunDiskBrightness * sunIntensity;
     
-    // Sun disk brightness
-    vec3 sun = sunDiskColor * sunDisk * SUN_DISK_BRIGHTNESS * sunIntensity;
-    
-    // Mie scattering creates bright halo around sun (atmospheric glow)
+    // Enhanced Mie scattering halo (atmospheric glow around sun/moon)
     float sunHalo = pow(max(0.0, sunDot), SUN_HALO_POWER);
     float haloIntensity = (1.0 - elevation * 0.3) * (1.0 - sunMieTransmittance);
-    vec3 halo = sunDiskColor * sunHalo * haloIntensity * SUN_HALO_INTENSITY * sunIntensity;
+    float haloBrightness = mix(SUN_HALO_INTENSITY_NIGHT, SUN_HALO_INTENSITY_DAY,
+                                smoothstep(-0.1, 0.1, sunElevation));
+    vec3 halo = sunColor * sunHalo * haloIntensity * haloBrightness * sunIntensity;
     
     // Combine all components
     vec3 finalSky = sky + sun + halo;
     
-    // Ensure minimum brightness (never completely black)
-    const vec3 MIN_SKY_BRIGHTNESS = vec3(0.02, 0.05, 0.1);
-    finalSky = max(finalSky, MIN_SKY_BRIGHTNESS);
+    // Time-of-day dependent minimum brightness
+    vec3 minSkyBrightness;
+    if (sunElevation < 0.0) {
+        // Night: very dark but not black
+        minSkyBrightness = vec3(0.005, 0.01, 0.02);
+    } else if (sunElevation < 0.1) {
+        // Twilight: dim
+        float twilightFactor = smoothstep(0.0, 0.1, sunElevation);
+        minSkyBrightness = mix(vec3(0.01, 0.02, 0.03), vec3(0.02, 0.05, 0.1), twilightFactor);
+    } else {
+        // Day: brighter minimum
+        minSkyBrightness = vec3(0.02, 0.05, 0.1);
+    }
+    finalSky = max(finalSky, minSkyBrightness);
+    
+    // Add subtle gradient from horizon to zenith (more pronounced at night)
+    if (sunElevation < 0.0) {
+        float gradientFactor = pow(elevation, 0.5);
+        finalSky = mix(finalSky * 0.3, finalSky, gradientFactor);
+    }
     
     return finalSky;
 }
@@ -399,8 +521,13 @@ float getFoam(vec2 pos, vec3 normal, float time, vec2 gradient) {
     return foam;
 }
 
-// --- Main Shading Function ---
+// --- Enhanced PBR Shading Function with Time-of-Day Support ---
 vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient) {
+    // Get dynamic sun properties based on time
+    vec3 sunDir = getSunDir(time);
+    vec3 sunColor = getSunColor(time);
+    float sunIntensity = getSunIntensity(time);
+    
     // Fresnel - per-channel for energy conservation
     vec3 F = getFresnel(viewDir, normal);
     
@@ -415,7 +542,7 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient) 
     vec3 absorption = exp(-waterAbsorption * depth);
     vec3 refractedColor = waterColor * absorption;
     
-    // Reflection
+    // Enhanced reflection with proper IBL sampling
     vec3 reflectedDir = reflect(-viewDir, normal);
     
     // Clamp reflected direction to prevent reflecting below horizon
@@ -425,28 +552,44 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient) 
         reflectedDir = normalize(vec3(reflectedDir.x, 0.01, reflectedDir.z));
     }
     
-    vec3 reflectedColor = skyColor(reflectedDir);
+    // Sample sky with time-of-day support
+    vec3 reflectedColor = skyColor(reflectedDir, time);
     
     // Mix reflection and refraction based on Fresnel (per-channel for energy conservation)
     // Energy conservation: refracted * (1 - F) + reflected * F
     vec3 baseColor = refractedColor * (1.0 - F) + reflectedColor * F;
     
-    // Direct lighting
+    // Enhanced PBR direct lighting
     vec3 lightDir = sunDir;
     vec3 lightColor = sunColor * sunIntensity;
     
-    // Specular highlight
+    // Specular highlight with Cook-Torrance BRDF
     float dynamicRoughness = roughness;
     vec3 specular = specularBRDF(normal, viewDir, lightDir, lightColor, dynamicRoughness);
     
-    // Subsurface scattering
+    // Energy-conserving diffuse term
+    vec3 kS = F; // Specular contribution from Fresnel
+    vec3 kD = (1.0 - kS); // Diffuse contribution (water is dielectric, metallic = 0)
+    
+    // Lambertian diffuse
+    float NdotL = max(dot(normal, lightDir), 0.0);
+    vec3 diffuse = kD * waterColor * lightColor * NdotL / PI;
+    
+    // Subsurface scattering (enhanced for shallow water)
     vec3 subsurface = getSubsurfaceScattering(normal, viewDir, lightDir, depth);
     
-    // Ambient (simplified IBL)
-    vec3 ambient = skyColor(normal) * 0.15;
+    // Enhanced ambient lighting with proper IBL
+    // Sample environment in normal direction for diffuse ambient
+    vec3 ambientDir = normalize(normal + vec3(0.0, 1.0, 0.0)); // Hemisphere sampling
+    vec3 ambientDiffuse = skyColor(ambientDir, time) * kD * waterColor * 0.15;
     
-    // Build diffuse/volume term without specular
-    vec3 waterBase = baseColor + subsurface + ambient;
+    // Specular ambient (environment reflection for ambient)
+    vec3 ambientSpecular = skyColor(reflectedDir, time) * F * 0.1;
+    
+    vec3 ambient = ambientDiffuse + ambientSpecular;
+    
+    // Build diffuse/volume term
+    vec3 waterBase = baseColor + diffuse + subsurface + ambient;
     
     // Foam - realistic appearance (gradient passed to avoid redundant computation)
     float foam = getFoam(pos.xz, normal, time, gradient);
@@ -490,6 +633,51 @@ vec3 raymarchOcean(vec3 ro, vec3 rd, float time) {
     return ro + rd * MAX_DIST;
 }
 
+// --- Atmospheric Fog/Haze ---
+// Adds realistic atmospheric perspective based on distance and time of day
+vec3 applyAtmosphericFog(vec3 color, vec3 pos, vec3 camPos, vec3 rayDir, float time) {
+    float dist = length(pos - camPos);
+    
+    // Fog density varies with time of day (more fog at sunrise/sunset)
+    float tod = getTimeOfDay(time);
+    vec3 sunDir = getSunDir(time);
+    float sunElevation = sunDir.y;
+    
+    // Base fog density
+    float fogDensity = 0.02;
+    
+    // Increase fog near horizon and during twilight
+    if (sunElevation < 0.2) {
+        float horizonFactor = pow(max(0.0, 1.0 - rayDir.y), 2.0);
+        float twilightFactor = smoothstep(0.2, 0.0, sunElevation);
+        fogDensity += horizonFactor * twilightFactor * 0.03;
+    }
+    
+    // Fog falloff with distance
+    float fogFactor = 1.0 - exp(-fogDensity * dist);
+    
+    // Fog color based on time of day
+    vec3 fogColor;
+    if (sunElevation < 0.0) {
+        // Night: dark blue/purple fog
+        fogColor = vec3(0.05, 0.08, 0.12);
+    } else if (sunElevation < 0.2) {
+        // Sunrise/sunset: warm orange/red fog
+        float sunsetFactor = smoothstep(0.2, 0.0, sunElevation);
+        fogColor = mix(vec3(0.3, 0.4, 0.5), vec3(0.6, 0.4, 0.2), sunsetFactor);
+    } else {
+        // Day: blue-white fog
+        fogColor = vec3(0.5, 0.6, 0.7);
+    }
+    
+    // Sample sky color for fog (atmospheric perspective)
+    vec3 skyFogColor = skyColor(rayDir, time);
+    fogColor = mix(fogColor, skyFogColor, 0.3);
+    
+    // Apply fog
+    return mix(color, fogColor, fogFactor);
+}
+
 // --- Main ---
 void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec2 uv = (fragCoord - 0.5 * iResolution.xy) / iResolution.y;
@@ -512,7 +700,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     
     // Background
     if (length(pos - camPos) > MAX_DIST * 0.95) {
-        fragColor = vec4(skyColor(rd), 1.0);
+        fragColor = vec4(skyColor(rd, iTime), 1.0);
         return;
     }
     
@@ -523,6 +711,9 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     
     // Shade
     vec3 color = shadeOcean(pos, normal, viewDir, iTime, gradient);
+    
+    // Apply atmospheric fog/haze
+    color = applyAtmosphericFog(color, pos, camPos, rd, iTime);
     
     // Tone mapping
     color = color / (color + vec3(1.0));
