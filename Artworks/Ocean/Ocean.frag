@@ -1846,50 +1846,6 @@ vec3 applyAtmosphericFog(vec3 color, vec3 pos, vec3 camPos, vec3 rayDir, SkyAtmo
     return mix(color, fogColor, fogFactor);
 }
 
-// LEGACY: Atmospheric fog with time-based system (backward compatibility)
-vec3 applyAtmosphericFog(vec3 color, vec3 pos, vec3 camPos, vec3 rayDir, float time) {
-    float dist = length(pos - camPos);
-    
-    // Fog density varies with time of day (more fog at sunrise/sunset)
-    float tod = getTimeOfDay(time);
-    vec3 sunDir = getSunDir(time);
-    float sunElevation = sunDir.y;
-    
-    // Base fog density
-    float fogDensity = 0.02;
-    
-    // Increase fog near horizon and during twilight
-    if (sunElevation < 0.2) {
-        float horizonFactor = pow(max(0.0, 1.0 - rayDir.y), 2.0);
-        float twilightFactor = smoothstep(0.2, 0.0, sunElevation);
-        fogDensity += horizonFactor * twilightFactor * 0.03;
-    }
-    
-    // Fog falloff with distance
-    float fogFactor = 1.0 - exp(-fogDensity * dist);
-    
-    // Fog color based on time of day
-    vec3 fogColor;
-    if (sunElevation < 0.0) {
-        // Night: dark blue/purple fog
-        fogColor = vec3(0.05, 0.08, 0.12);
-    } else if (sunElevation < 0.2) {
-        // Sunrise/sunset: warm orange/red fog
-        float sunsetFactor = smoothstep(0.2, 0.0, sunElevation);
-        fogColor = mix(vec3(0.3, 0.4, 0.5), vec3(0.6, 0.4, 0.2), sunsetFactor);
-    } else {
-        // Day: blue-white fog
-        fogColor = vec3(0.5, 0.6, 0.7);
-    }
-    
-    // Sample sky color for fog (atmospheric perspective)
-    vec3 skyFogColor = skyColor(rayDir, time);
-    fogColor = mix(fogColor, skyFogColor, 0.3);
-    
-    // Apply fog
-    return mix(color, fogColor, fogFactor);
-}
-
 // --- Main ---
 // --- Main Rendering Function ---
 void mainImage(out vec4 fragColor, in vec2 fragCoord) {
@@ -1971,8 +1927,34 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     // Shade
     vec3 color = shadeOcean(pos, normal, viewDir, iTime, gradient);
     
-    // Apply atmospheric fog/haze
-    color = applyAtmosphericFog(color, pos, cam.position, rd, iTime);
+    // Create sky from time-of-day system for fog
+    float tod = getTimeOfDay(iTime);
+    vec3 sunDir = getSunDirection(tod);
+    float sunElev = sunDir.y;
+    
+    // Convert time-of-day to sky configuration (same as skyColor function)
+    SkyAtmosphere sky = createSkyPreset_ClearDay();
+    sky.sunRotation = tod;
+    sky.sunElevation = sunElev;
+    sky.sunColor = getSunColorFromElevation(sunElev);
+    sky.sunIntensity = getSunIntensityFromElevation(sunElev);
+    
+    // Auto-configure moon (opposite to sun)
+    if (sunElev < 0.0 || tod < 0.25 || tod > 0.75) {
+        sky.enableMoon = true;
+        sky.moonRotation = mod(tod + 0.5, 1.0);
+        sky.moonElevation = -sunElev;
+    }
+    
+    // Auto-enable stars at night
+    if (sunElev < 0.1) {
+        sky.enableStars = true;
+        float nightFactor = smoothstep(0.1, -0.2, sunElev);
+        sky.starBrightness = nightFactor;
+    }
+    
+    // Apply atmospheric fog/haze using the new SkyAtmosphere system
+    color = applyAtmosphericFog(color, pos, cam.position, rd, sky, iTime);
     
     // Apply camera exposure (physically-based)
     // This multiplies the color by the exposure value
