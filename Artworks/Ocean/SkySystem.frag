@@ -343,15 +343,6 @@ float miePhase(float cosTheta, float g) {
     return (1.0 - g2) / (4.0 * PI * pow(1.0 + g2 - 2.0 * g * cosTheta, 1.5));
 }
 
-// Calculate optical depth through atmosphere
-// Simplified model: optical depth increases as elevation decreases
-// (more atmosphere to travel through near horizon)
-float getOpticalDepth(vec3 dir, float scaleHeight) {
-    float elevation = max(dir.y, 0.01);
-    // Inverse relationship: lower elevation = more atmosphere = higher optical depth
-    return scaleHeight / elevation;
-}
-
 // ============================================================================
 // ADVANCED SKY SPHERE SYSTEM
 // ============================================================================
