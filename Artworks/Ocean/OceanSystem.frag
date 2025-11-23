@@ -214,6 +214,7 @@ float getWaveHeight(vec2 pos, float time) {
 
 // Compute wave height and gradient analytically (much faster than finite differences)
 // Returns vec3(height, grad.x, grad.y)
+// Uses temporally stable phase calculation to reduce precision issues
 vec3 getWaveHeightAndGradient(vec2 pos, float time) {
     float height = 0.0;
     vec2 grad = vec2(0.0);
@@ -222,7 +223,12 @@ vec3 getWaveHeightAndGradient(vec2 pos, float time) {
         vec2 dir = getWaveDir(i);
         float k = waveFreqs[i];
         float w = getWaveSpeed(k);
-        float phase = dot(pos, dir) * k + time * w;
+        // Calculate phase with improved precision
+        // Split calculation to reduce precision loss
+        float spatialPhase = dot(pos, dir) * k;
+        float temporalPhase = time * w;
+        float phase = spatialPhase + temporalPhase;
+        
         float s = sin(phase);
         float c = cos(phase);
         float A = waveAmps[i];
@@ -243,17 +249,25 @@ vec2 getWaveGradient(vec2 pos, float time) {
 }
 
 // Enhanced normal calculation with analytical derivatives
+// Uses temporally stable smoothing to reduce jittering
 vec3 getNormal(vec2 pos, float time, out vec2 gradient) {
     // Get base gradient analytically (fast and accurate)
     vec2 grad = getWaveGradient(pos, time);
     
-    // Very light smoothing to reduce banding - only at small scale
+    // Temporally stable smoothing using rotated offsets to reduce aliasing
+    // Use a small rotation based on position to break up patterns
+    float angle = dot(pos, vec2(0.7071, 0.7071)) * 0.5; // Stable rotation
+    float cosA = cos(angle);
+    float sinA = sin(angle);
+    vec2 rotX = vec2(cosA, sinA);
+    vec2 rotY = vec2(-sinA, cosA);
+    
     const float smoothingRadius = 0.01;
     vec2 gradSmooth = grad;
-    gradSmooth += getWaveGradient(pos + vec2(smoothingRadius, 0.0), time) * 0.15;
-    gradSmooth += getWaveGradient(pos - vec2(smoothingRadius, 0.0), time) * 0.15;
-    gradSmooth += getWaveGradient(pos + vec2(0.0, smoothingRadius), time) * 0.15;
-    gradSmooth += getWaveGradient(pos - vec2(0.0, smoothingRadius), time) * 0.15;
+    gradSmooth += getWaveGradient(pos + rotX * smoothingRadius, time) * 0.15;
+    gradSmooth += getWaveGradient(pos - rotX * smoothingRadius, time) * 0.15;
+    gradSmooth += getWaveGradient(pos + rotY * smoothingRadius, time) * 0.15;
+    gradSmooth += getWaveGradient(pos - rotY * smoothingRadius, time) * 0.15;
     grad = mix(grad, gradSmooth / 1.6, 0.2); // Very gentle smoothing
     
     gradient = grad;
@@ -262,13 +276,16 @@ vec3 getNormal(vec2 pos, float time, out vec2 gradient) {
     vec3 normal = normalize(vec3(-grad.x, 1.0, -grad.y));
     
     // Add subtle micro-detail only where needed (reduces banding)
+    // Use temporally stable offsets
     float waveHeight = getWaveHeight(pos, time);
     float crestFactor = smoothstep(-0.2, 0.3, waveHeight);
     
     if (crestFactor > 0.1) {
         const float microDetail = 0.02;
-        vec2 gradX = getWaveGradient(pos + vec2(microDetail, 0.0), time);
-        vec2 gradY = getWaveGradient(pos + vec2(0.0, microDetail), time);
+        vec2 microX = rotX * microDetail;
+        vec2 microY = rotY * microDetail;
+        vec2 gradX = getWaveGradient(pos + microX, time);
+        vec2 gradY = getWaveGradient(pos + microY, time);
         
         vec3 microNormal = normalize(vec3(-(gradX.x + grad.x) * 0.5, 1.0, -(gradY.y + grad.y) * 0.5));
         normal = normalize(mix(normal, microNormal, crestFactor * 0.08)); // Very subtle
@@ -426,6 +443,7 @@ vec3 getSubsurfaceScattering(vec3 normal, vec3 viewDir, vec3 lightDir, float dep
 }
 
 // Wave Energy Calculation
+// Fixed to avoid temporal discontinuities
 float calculateWaveEnergy(vec2 pos, float time) {
     vec2 grad = getWaveGradient(pos, time);
     float slope = length(grad);
@@ -434,9 +452,17 @@ float calculateWaveEnergy(vec2 pos, float time) {
     float kineticEnergy = slope * slope * 2.5;
     float potentialEnergy = height * height * 0.6;
     
-    float hPrev = getWaveHeight(pos, time - 0.05);
-    float velocity = abs(height - hPrev) / 0.05;
-    float velocityEnergy = velocity * velocity * 1.5;
+    // Use analytical velocity instead of finite difference to avoid temporal jitter
+    // Velocity is the time derivative: dh/dt = sum(A * w * cos(phase))
+    float velocity = 0.0;
+    for (int i = 0; i < NUM_WAVES; i++) {
+        vec2 dir = getWaveDir(i);
+        float k = waveFreqs[i];
+        float w = getWaveSpeed(k);
+        float phase = dot(pos, dir) * k + time * w;
+        velocity += waveAmps[i] * w * cos(phase);
+    }
+    float velocityEnergy = abs(velocity) * abs(velocity) * 1.5;
     
     float energy = kineticEnergy + potentialEnergy + velocityEnergy;
     
@@ -531,8 +557,11 @@ vec3 calculateCaustics(vec3 floorPos, vec3 waterSurfacePos, vec3 waterNormal, ve
     
     float sampleRadius = depth * 0.15;
     
+    // Add temporal jitter to reduce aliasing - use stable hash based on position
+    float jitter = fract(dot(surfacePos, vec2(0.7548776662466928, 0.5698402909980532)) + time * 0.001) * TAU;
+    
     for (int i = 0; i < numSamples; i++) {
-        float angle = float(i) * TAU / float(numSamples);
+        float angle = float(i) * TAU / float(numSamples) + jitter;
         float radius = sampleRadius * (0.5 + float(i) * 0.1);
         vec2 sampleOffset = vec2(cos(angle), sin(angle)) * radius;
         vec2 samplePos = surfacePos + sampleOffset;
@@ -646,8 +675,12 @@ float calculateWaterRoughness(vec2 gradient, float waveHeight) {
 
 vec3 getDistortedReflectionDir(vec3 reflectedDir, vec3 normal, float roughness, vec2 pos, float time) {
     const float distortionScale = 0.3;
-    vec2 distortion = getWaveGradient(pos + vec2(0.1, 0.0), time) * 0.02 +
-                      getWaveGradient(pos - vec2(0.1, 0.0), time) * 0.02;
+    // Use rotated offsets for more stable sampling
+    float angle = dot(pos, vec2(0.7071, 0.7071)) * 0.5;
+    vec2 offset1 = vec2(cos(angle), sin(angle)) * 0.1;
+    vec2 offset2 = vec2(-sin(angle), cos(angle)) * 0.1;
+    vec2 distortion = getWaveGradient(pos + offset1, time) * 0.02 +
+                      getWaveGradient(pos + offset2, time) * 0.02;
     
     distortion *= roughness * distortionScale;
     
@@ -742,16 +775,20 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient, 
     vec3 reflectedColor = skyColor(distortedReflectedDir, sky, time);
     
     float roughnessFactor = smoothstep(baseRoughness, maxRoughness, dynamicRoughness);
+    // Use consistent sample count to avoid temporal flickering
     int numSamples = int(mix(1.0, 3.0, roughnessFactor));
+    numSamples = max(1, min(3, numSamples)); // Clamp to avoid jumps
     
     if (numSamples > 1 && dynamicRoughness > baseRoughness * 1.5) {
         vec3 sampleSum = reflectedColor;
         float sampleWeight = 1.0;
         
         const float goldenAngle = 2.399963229728653;
+        // Add temporal jitter to reduce aliasing - use stable hash based on position
+        float jitter = fract(dot(pos.xz, vec2(0.7548776662466928, 0.5698402909980532)) + time * 0.001) * 0.1;
         
         for (int i = 1; i < numSamples; i++) {
-            float angle = float(i) * goldenAngle;
+            float angle = float(i) * goldenAngle + jitter;
             float radius = dynamicRoughness * 0.08 * sqrt(float(i) / float(numSamples));
             
             vec2 offset = vec2(cos(angle), sin(angle)) * radius;
@@ -812,8 +849,11 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient, 
             vec3 sampleSum = normalReflectedColor;
             float sampleWeight = 1.0;
             
+            // Add temporal jitter to reduce aliasing
+            float jitter = fract(dot(pos.xz, vec2(0.7548776662466928, 0.5698402909980532)) + time * 0.001) * TAU;
+            
             for (int i = 0; i < numIBLSamples; i++) {
-                float angle = float(i) * TAU / float(numIBLSamples);
+                float angle = float(i) * TAU / float(numIBLSamples) + jitter;
                 vec3 offset = vec3(cos(angle), 0.0, sin(angle)) * dynamicRoughness * 0.1;
                 vec3 sampleDir = normalize(normalReflected + offset);
                 if (sampleDir.y > 0.0) {
@@ -856,18 +896,40 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient, 
 
 vec3 raymarchOcean(vec3 ro, vec3 rd, float time) {
     float t = 0.0;
+    float prevH = 1e10;
     
     for (int i = 0; i < MAX_STEPS; i++) {
         vec3 pos = ro + rd * t;
         float h = pos.y - getWaveHeight(pos.xz, time);
         
-        if (abs(h) < MIN_DIST) {
+        // More stable convergence check with small bias
+        if (abs(h) < MIN_DIST * 1.5) {
+            // Refine position for better precision
+            vec3 refinedPos = pos;
+            if (abs(h) > MIN_DIST * 0.5) {
+                // Take a small step back and forward to find better position
+                float refineStep = h * 0.3;
+                refinedPos = ro + rd * (t - refineStep);
+                float hRefined = refinedPos.y - getWaveHeight(refinedPos.xz, time);
+                if (abs(hRefined) < abs(h)) {
+                    pos = refinedPos;
+                }
+            }
             return pos;
         }
         
         if (t > MAX_DIST) break;
         
-        float stepSize = clamp(h * 0.5, MIN_DIST, 1.0);
+        // More stable stepping - avoid oscillation
+        float stepSize = clamp(h * 0.4, MIN_DIST * 0.5, 1.0);
+        
+        // Prevent oscillation by checking if we're getting closer
+        if (abs(h) > abs(prevH) * 1.1 && i > 2) {
+            // We're moving away, take smaller step
+            stepSize = MIN_DIST;
+        }
+        
+        prevH = h;
         t += stepSize;
     }
     

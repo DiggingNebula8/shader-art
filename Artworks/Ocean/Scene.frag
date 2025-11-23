@@ -63,13 +63,21 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
         return;
     }
     
+    // Stabilize position to reduce jittering
+    // Use a small snap grid for XZ to ensure consistent sampling
+    // Recalculate Y from the snapped XZ to maintain accuracy
+    const float positionSnap = 0.0005;
+    vec2 snappedXZ = floor(pos.xz / positionSnap + 0.5) * positionSnap;
+    float stableY = getWaveHeight(snappedXZ, iTime);
+    vec3 stablePos = vec3(snappedXZ.x, stableY, snappedXZ.y);
+    
     // Compute normal (gradient computed here and passed through to avoid redundant computation)
     vec2 gradient;
-    vec3 normal = getNormal(pos.xz, iTime, gradient);
+    vec3 normal = getNormal(stablePos.xz, iTime, gradient);
     vec3 viewDir = -rd;
     
-    // Shade ocean with sky configuration
-    vec3 color = shadeOcean(pos, normal, viewDir, iTime, gradient, sky);
+    // Shade ocean with sky configuration - use stable position for consistent results
+    vec3 color = shadeOcean(stablePos, normal, viewDir, iTime, gradient, sky);
     
     // Apply atmospheric fog/haze using the SkyAtmosphere system
     color = applyAtmosphericFog(color, pos, cam.position, rd, sky, iTime);
