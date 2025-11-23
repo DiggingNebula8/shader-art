@@ -158,9 +158,9 @@ float calculateCircleOfConfusion(Camera cam, float distance) {
     float focusDist = cam.focusDistance;
     float blurAmount = abs(distance - focusDist) / focusDist;
     
-    // Aperture affects depth of field
-    // Larger f-stop (smaller aperture) = more depth of field
-    float dofFactor = cam.fStop / 2.8; // Normalize to f/2.8
+    // Aperture affects depth of field:
+    // Larger f-stop (smaller aperture) = more depth of field (less blur)
+    float dofFactor = 2.8 / max(cam.fStop, 0.001); // Normalize to f/2.8, avoid div-by-zero
     
     return cocRadius * blurAmount * dofFactor;
 }
