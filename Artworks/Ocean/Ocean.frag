@@ -8,8 +8,8 @@ const float TAU = 6.28318530718;
 const float EPSILON = 0.0001;
 
 // Raymarching
-const int MAX_STEPS = 200;
-const float MIN_DIST = 0.001;
+const int MAX_STEPS = 600;
+const float MIN_DIST = .1;
 const float MAX_DIST = 150.0;
 
 // Physical Constants
@@ -150,11 +150,106 @@ float getSunIntensity(float time) {
 // Water Properties
 const vec3 waterAbsorption = vec3(0.15, 0.045, 0.015); // m^-1 (realistic values)
 const float roughness = 0.02; // Very smooth ocean surface
+const float WATER_IOR = 1.33; // Index of refraction for water
+const float AIR_IOR = 1.0;    // Index of refraction for air
 
 // Water Colors
 const vec3 deepWaterColor = vec3(0.0, 0.15, 0.3);
 const vec3 shallowWaterColor = vec3(0.0, 0.4, 0.6);
-const float oceanFloorDepth = -15.0;
+
+// --- Ocean Floor Terrain Parameters ---
+// Controls the shape and variation of the ocean floor
+struct OceanFloorParams {
+    float baseDepth;        // Base depth of the ocean floor (negative Y value)
+    float heightVariation;  // Maximum height variation from base depth
+    float largeScale;       // Large-scale terrain feature size
+    float mediumScale;      // Medium-scale terrain feature size
+    float smallScale;       // Small-scale terrain feature size (detail)
+    float largeAmplitude;   // Amplitude of large-scale features
+    float mediumAmplitude;  // Amplitude of medium-scale features
+    float smallAmplitude;   // Amplitude of small-scale features (detail)
+    float roughness;        // Overall terrain roughness (0.0 = smooth, 1.0 = rough)
+};
+
+// Default ocean floor parameters
+OceanFloorParams createDefaultOceanFloor() {
+    OceanFloorParams params;
+    params.baseDepth = -105.0;        // Base depth at -105m
+    params.heightVariation = 25.0;    // ±25m variation
+    params.largeScale = 0.02;          // Large features every ~50m
+    params.mediumScale = 0.08;         // Medium features every ~12.5m
+    params.smallScale = 0.3;           // Small features every ~3.3m
+    params.largeAmplitude = 0.6;       // Large features contribute 60%
+    params.mediumAmplitude = 0.3;      // Medium features contribute 30%
+    params.smallAmplitude = 0.1;       // Small features contribute 10%
+    params.roughness = 0.5;            // Moderate roughness
+    return params;
+}
+
+// Simple hash function for pseudo-random noise
+float hash(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+// Smooth noise function (value noise)
+float smoothNoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f); // Smoothstep
+    
+    float a = hash(i);
+    float b = hash(i + vec2(1.0, 0.0));
+    float c = hash(i + vec2(0.0, 1.0));
+    float d = hash(i + vec2(1.0, 1.0));
+    
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+// Fractal noise (fBm - fractional Brownian motion)
+float fractalNoise(vec2 p, float scale, int octaves, float persistence) {
+    float value = 0.0;
+    float amplitude = 1.0;
+    float frequency = scale;
+    float maxValue = 0.0;
+    
+    for (int i = 0; i < octaves; i++) {
+        value += smoothNoise(p * frequency) * amplitude;
+        maxValue += amplitude;
+        amplitude *= persistence;
+        frequency *= 2.0;
+    }
+    
+    return value / maxValue; // Normalize to [0, 1]
+}
+
+// Get ocean floor height at position (x, z)
+// Returns the Y coordinate of the ocean floor
+float getOceanFloorHeight(vec2 pos, OceanFloorParams params) {
+    // Large-scale terrain (hills, valleys)
+    float largeNoise = fractalNoise(pos, params.largeScale, 3, 0.5);
+    float largeHeight = (largeNoise - 0.5) * 2.0; // [-1, 1]
+    
+    // Medium-scale terrain (ridges, slopes)
+    float mediumNoise = fractalNoise(pos + vec2(100.0, 100.0), params.mediumScale, 2, 0.6);
+    float mediumHeight = (mediumNoise - 0.5) * 2.0; // [-1, 1]
+    
+    // Small-scale terrain (detail, bumps)
+    float smallNoise = fractalNoise(pos + vec2(200.0, 200.0), params.smallScale, 2, 0.7);
+    float smallHeight = (smallNoise - 0.5) * 2.0; // [-1, 1]
+    
+    // Combine all scales with their amplitudes
+    float heightVariation = largeHeight * params.largeAmplitude +
+                           mediumHeight * params.mediumAmplitude +
+                           smallHeight * params.smallAmplitude;
+    
+    // Apply roughness (adds more variation)
+    heightVariation *= (1.0 + params.roughness * 0.5);
+    
+    // Scale by height variation parameter and add to base depth
+    float floorHeight = params.baseDepth + heightVariation * params.heightVariation;
+    
+    return floorHeight;
+}
 
 // --- Modular Physically-Based Camera System ---
 // Implements real camera parameters: shutter speed, f-stop, ISO, focal length
@@ -764,6 +859,150 @@ float getFoam(vec2 pos, vec3 normal, float time, vec2 gradient) {
     return foam;
 }
 
+// --- Water Translucency ---
+// Raymarch through water to find the ocean floor
+// Returns: (hit, distance, floor position)
+// hit = 1.0 if floor was found, 0.0 otherwise
+vec3 raymarchThroughWater(vec3 startPos, vec3 rayDir, float time, OceanFloorParams floorParams) {
+    float t = 0.0;
+    const float MAX_WATER_DEPTH = 200.0; // Maximum depth to search
+    const float WATER_STEP_SIZE = 0.5;   // Step size for underwater raymarching
+    
+    for (int i = 0; i < 200; i++) {
+        vec3 pos = startPos + rayDir * t;
+        
+        // Get ocean floor height at this position
+        float floorHeight = getOceanFloorHeight(pos.xz, floorParams);
+        
+        // Check if we've hit the floor
+        float distToFloor = pos.y - floorHeight;
+        
+        if (distToFloor < MIN_DIST) {
+            // Hit the floor
+            return vec3(1.0, t, 0.0); // (hit, distance, unused)
+        }
+        
+        // Check if we've gone too deep or too far
+        if (t > MAX_WATER_DEPTH || distToFloor > 50.0) {
+            break;
+        }
+        
+        // Adaptive step size based on distance to floor
+        float stepSize = clamp(distToFloor * 0.3, WATER_STEP_SIZE, 2.0);
+        t += stepSize;
+    }
+    
+    return vec3(0.0, t, 0.0); // Didn't hit floor
+}
+
+// Calculate refracted ray direction using Snell's law
+vec3 refractRay(vec3 incident, vec3 normal, float eta) {
+    float cosI = -dot(incident, normal);
+    float sinT2 = eta * eta * (1.0 - cosI * cosI);
+    
+    // Total internal reflection
+    if (sinT2 > 1.0) {
+        return reflect(incident, normal);
+    }
+    
+    float cosT = sqrt(1.0 - sinT2);
+    return eta * incident + (eta * cosI - cosT) * normal;
+}
+
+// Get ocean floor normal (for shading)
+vec3 getOceanFloorNormal(vec3 pos, OceanFloorParams floorParams) {
+    const float eps = 0.5;
+    
+    float hL = getOceanFloorHeight(pos.xz - vec2(eps, 0.0), floorParams);
+    float hR = getOceanFloorHeight(pos.xz + vec2(eps, 0.0), floorParams);
+    float hD = getOceanFloorHeight(pos.xz - vec2(0.0, eps), floorParams);
+    float hU = getOceanFloorHeight(pos.xz + vec2(0.0, eps), floorParams);
+    
+    vec3 normal = normalize(vec3(hL - hR, 2.0 * eps, hD - hU));
+    return normal;
+}
+
+// Shade the ocean floor
+vec3 shadeOceanFloor(vec3 floorPos, vec3 viewDir, vec3 normal, float time, OceanFloorParams floorParams) {
+    // Get dynamic sun properties
+    vec3 sunDir = getSunDir(time);
+    vec3 sunColor = getSunColor(time);
+    float sunIntensity = getSunIntensity(time);
+    
+    // Ocean floor material properties
+    const vec3 floorColorBase = vec3(0.3, 0.25, 0.2); // Sandy/brown ocean floor
+    const float floorRoughness = 0.8; // Ocean floor is rough
+    
+    // Add some color variation based on depth/terrain
+    float floorHeight = getOceanFloorHeight(floorPos.xz, floorParams);
+    float depthVariation = (floorHeight - floorParams.baseDepth) / floorParams.heightVariation;
+    vec3 floorColor = mix(floorColorBase * 0.7, floorColorBase * 1.3, depthVariation * 0.5 + 0.5);
+    
+    // Add subtle texture variation
+    float textureNoise = smoothNoise(floorPos.xz * 0.5) * 0.1;
+    floorColor += textureNoise;
+    
+    // Lighting
+    float NdotL = max(dot(normal, sunDir), 0.0);
+    
+    // Ambient lighting (reduced underwater)
+    vec3 ambient = floorColor * 0.1;
+    
+    // Diffuse lighting
+    vec3 diffuse = floorColor * sunColor * sunIntensity * NdotL;
+    
+    // Simple specular (water-wet floor has some specular)
+    vec3 halfVec = normalize(viewDir + sunDir);
+    float NdotH = max(dot(normal, halfVec), 0.0);
+    float specularPower = pow(NdotH, 32.0) * (1.0 - floorRoughness);
+    vec3 specular = sunColor * sunIntensity * specularPower * 0.2;
+    
+    return ambient + diffuse + specular;
+}
+
+// Compute translucency: combine water surface color with visible floor
+vec3 computeTranslucency(vec3 waterSurfacePos, vec3 waterNormal, vec3 viewDir, float time, vec3 waterColor, OceanFloorParams floorParams) {
+    // Calculate refracted ray direction (entering water)
+    float eta = AIR_IOR / WATER_IOR; // From air to water
+    vec3 refractedDir = refractRay(-viewDir, waterNormal, eta);
+    
+    // If total internal reflection, no translucency
+    if (dot(refractedDir, waterNormal) > 0.0) {
+        return vec3(0.0); // No floor visible
+    }
+    
+    // Raymarch through water to find floor
+    vec3 rayResult = raymarchThroughWater(waterSurfacePos, refractedDir, time, floorParams);
+    float hitFloor = rayResult.x;
+    float waterPathLength = rayResult.y;
+    
+    if (hitFloor < 0.5) {
+        return vec3(0.0); // Floor not visible
+    }
+    
+    // Calculate floor position
+    vec3 floorPos = waterSurfacePos + refractedDir * waterPathLength;
+    
+    // Get floor normal
+    vec3 floorNormal = getOceanFloorNormal(floorPos, floorParams);
+    
+    // Shade the floor
+    vec3 floorColor = shadeOceanFloor(floorPos, -refractedDir, floorNormal, time, floorParams);
+    
+    // Apply water absorption based on path length through water
+    // Longer path = more absorption = darker floor
+    vec3 absorption = exp(-waterAbsorption * waterPathLength);
+    
+    // Apply absorption to floor color
+    vec3 visibleFloorColor = floorColor * absorption;
+    
+    // Add some water tinting (blue-green)
+    vec3 waterTint = mix(shallowWaterColor, deepWaterColor, 1.0 - exp(-waterPathLength * 0.05));
+    visibleFloorColor = mix(visibleFloorColor, waterTint, 0.3);
+    
+    return visibleFloorColor;
+}
+
 // --- Enhanced PBR Shading Function with Time-of-Day Support ---
 vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient) {
     // Get dynamic sun properties based on time
@@ -774,8 +1013,14 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient) 
     // Fresnel - per-channel for energy conservation
     vec3 F = getFresnel(viewDir, normal);
     
-    // Depth calculation
-    float depth = max(pos.y - oceanFloorDepth, 0.1);
+    // Ocean floor terrain parameters
+    OceanFloorParams floorParams = createDefaultOceanFloor();
+    
+    // Get ocean floor height at this position
+    float floorHeight = getOceanFloorHeight(pos.xz, floorParams);
+    
+    // Depth calculation: distance from water surface to ocean floor
+    float depth = max(pos.y - floorHeight, 0.1);
     
     // Water color based on depth
     float depthFactor = 1.0 - exp(-depth * 0.1);
@@ -851,6 +1096,23 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient) 
     
     // Add foamSpecular once to the foam-blended diffuse (no subtraction needed)
     color += foamSpecular;
+    
+    // --- Water Translucency ---
+    // Add visible ocean floor through the water
+    // Only apply translucency where water is not too opaque (shallow areas or clear water)
+    float translucencyFactor = 1.0 - smoothstep(5.0, 30.0, depth); // More visible in shallow water
+    translucencyFactor *= (1.0 - foam * 0.8); // Less visible where there's foam
+    
+    if (translucencyFactor > 0.01) {
+        vec3 floorColor = computeTranslucency(pos, normal, viewDir, time, waterBase, floorParams);
+        
+        // Blend floor color with water color based on translucency factor
+        // Use Fresnel to determine how much floor is visible (more visible at grazing angles)
+        float fresnelAvg = dot(F, vec3(1.0/3.0));
+        float floorVisibility = translucencyFactor * (1.0 - fresnelAvg * 0.7); // More visible at grazing angles
+        
+        color = mix(color, floorColor, floorVisibility);
+    }
     
     return color;
 }
