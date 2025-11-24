@@ -1,5 +1,15 @@
 # Ocean System Documentation
 
+> **⚠️ DEPRECATED**: This documentation refers to the legacy "Ocean System" as a single entity. The ocean rendering has been split into multiple focused systems:
+> - **WaveSystem.frag**: Wave geometry and simulation
+> - **WaterShading.frag**: Water material properties and PBR shading
+> - **TerrainSystem.frag**: Ocean floor geometry
+> - **TerrainShading.frag**: Ocean floor material properties
+> - **RenderPipeline.frag**: Orchestrates all systems and provides the main `renderScene()` API
+> - **SkySystem.frag**: Atmosphere and lighting
+> 
+> For new code, refer to the individual system files and use `RenderPipeline.frag`'s `renderScene(RenderContext ctx)` function.
+
 ## Overview
 
 The Ocean System provides a comprehensive, physically-based ocean rendering solution with realistic wave simulation, water shading, and ocean floor terrain. It implements:
@@ -30,7 +40,8 @@ ctx.terrainParams = terrainParams;
 ctx.camera = camera;
 
 // Render scene using RenderPipeline
-vec3 color = renderScene(camPos, rayDir, time, ctx);
+RenderResult result = renderScene(ctx);
+vec3 color = result.color;
 ```
 
 ## Wave System
@@ -299,7 +310,8 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     ctx.camera = cam;
     
     // Render scene using RenderPipeline
-    vec3 color = renderScene(cam.position, rd, iTime, ctx);
+    RenderResult result = renderScene(ctx);
+    vec3 color = result.color;
     
     fragColor = vec4(color, 1.0);
 }

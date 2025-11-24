@@ -175,8 +175,17 @@ cam.up = vec3(0.0, 1.0, 0.0);
 vec2 uv = fragCoord / iResolution.xy;
 vec3 rd = generateCameraRay(cam, uv, iResolution.xy);
 
-// Render scene...
-vec3 color = renderScene(cam.position, rd);
+// Render scene (using RenderPipeline)
+RenderContext ctx;
+ctx.cameraPos = cam.position;
+ctx.rayDir = rd;
+ctx.time = iTime;
+ctx.sky = createSkyPreset_ClearDay();
+ctx.terrainParams = createDefaultOceanFloor();
+ctx.camera = cam;
+
+RenderResult result = renderScene(ctx);
+vec3 color = result.color;
 
 // Apply exposure
 color = applyExposure(color, cam);
@@ -208,9 +217,18 @@ cam.enableDOF = true;
 cam.focusDistance = 5.0;  // Focus at 5 meters
 cam.fStop = 1.4;          // Wide aperture for shallow DOF
 
-// Render scene
-vec3 color = renderScene(cam.position, rd);
-float distance = length(hitPoint - cam.position);
+// Render scene (using RenderPipeline)
+RenderContext ctx;
+ctx.cameraPos = cam.position;
+ctx.rayDir = rd;
+ctx.time = iTime;
+ctx.sky = createSkyPreset_ClearDay();
+ctx.terrainParams = createDefaultOceanFloor();
+ctx.camera = cam;
+
+RenderResult result = renderScene(ctx);
+vec3 color = result.color;
+float distance = result.distance;
 
 // Apply depth of field
 color = applyDepthOfField(color, distance, cam);
