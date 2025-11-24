@@ -1,10 +1,6 @@
 // ============================================================================
-// RENDER PIPELINE - ORCHESTRATION LAYER
+// RENDER PIPELINE
 // ============================================================================
-// High-level orchestration layer that coordinates all rendering systems
-// 
-// NOTE: This is NOT the shader entry point!
-// The entry point is Scene.frag (which contains mainImage())
 // Scene.frag calls renderScene() from this file
 //
 // Responsibilities:
