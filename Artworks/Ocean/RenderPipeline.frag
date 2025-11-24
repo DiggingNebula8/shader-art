@@ -126,9 +126,11 @@ vec3 calculateRefraction(vec3 pos, vec3 normal, vec3 viewDir, RenderContext ctx)
 // Calculate reflection from water surface
 // Uses VolumeRaymarching + WaveSDF for surface intersection
 // Uses WaterShading for reflection calculation
+// Note: This helper is currently unused; shadeWater() handles reflection internally
 vec3 calculateReflection(vec3 pos, vec3 normal, vec3 viewDir, vec2 gradient, RenderContext ctx) {
     // Use WaterShading's reflection calculation
-    return calculateReflectedColor(pos, normal, viewDir, ctx.time, gradient, ctx.sky);
+    // Pass -1.0 for roughness to compute it internally
+    return calculateReflectedColor(pos, normal, viewDir, ctx.time, gradient, ctx.sky, -1.0);
 }
 
 // Compose final color from all contributions
@@ -192,7 +194,8 @@ vec3 composeFinalColor(SurfaceHit hit, RenderContext ctx) {
 // Uses ctx.cameraPos and ctx.rayDir for all ray operations
 RenderResult renderScene(float time, RenderContext ctx) {
     // Raymarch to water surface using WaveSystem
-    VolumeHit waterHit = raymarchWaveSurface(ctx.cameraPos, ctx.rayDir, MAX_DIST, time);
+    // Use ctx.time consistently to avoid divergence if time parameter differs
+    VolumeHit waterHit = raymarchWaveSurface(ctx.cameraPos, ctx.rayDir, MAX_DIST, ctx.time);
     
     SurfaceHit surfaceHit;
     surfaceHit.hit = waterHit.hit && waterHit.valid;
@@ -204,7 +207,7 @@ RenderResult renderScene(float time, RenderContext ctx) {
     // Calculate gradient for water shading
     if (surfaceHit.hit) {
         vec2 gradient;
-        surfaceHit.normal = getNormal(surfaceHit.position.xz, time, gradient);
+        surfaceHit.normal = getNormal(surfaceHit.position.xz, ctx.time, gradient);
         surfaceHit.gradient = gradient;
     }
     

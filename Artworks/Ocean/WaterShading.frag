@@ -6,8 +6,10 @@
 //          Jensen et al. "A Practical Model for Subsurface Light Transport"
 //          "Multiple-Scattering Microfacet BSDFs with the Smith Model"
 // ============================================================================
-// This system has NO dependencies on Terrain or Wave geometry
-// It uses interfaces (structs) for all dependencies
+// Dependencies:
+//   - WaveSystem: For wave height/gradient queries (getWaveHeight, getWaveGradient)
+//   - TerrainSystem: For terrain height queries (getTerrainHeight)
+//   - VolumeRaymarching: For terrain raymarching (raymarchTerrain)
 // ============================================================================
 
 #ifndef WATER_SHADING_FRAG
@@ -285,9 +287,14 @@ vec3 calculateRefractedColor(vec3 pos, vec3 normal, vec3 viewDir, WaterDepthInfo
     return refractedColor;
 }
 
-vec3 calculateReflectedColor(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient, SkyAtmosphere sky) {
-    float waveHeight = getWaveHeight(pos.xz, time);
-    float dynamicRoughness = calculateWaterRoughness(gradient, waveHeight);
+// Calculate reflected color
+// If dynamicRoughness < 0, it will be computed from gradient and waveHeight
+vec3 calculateReflectedColor(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient, SkyAtmosphere sky, float dynamicRoughness) {
+    if (dynamicRoughness < 0.0) {
+        // Compute roughness if not provided
+        float waveHeight = getWaveHeight(pos.xz, time);
+        dynamicRoughness = calculateWaterRoughness(gradient, waveHeight);
+    }
     
     // Calculate reflection direction once and reuse
     vec3 reflectedDir = reflect(-viewDir, normal);
@@ -349,11 +356,10 @@ struct WaterLightingResult {
 };
 
 WaterLightingResult calculateWaterLighting(vec3 pos, vec3 normal, vec3 viewDir, vec3 refractedColor, vec3 reflectedColor, 
-                                          WaterDepthInfo depthInfo, float time, vec2 gradient, SkyAtmosphere sky, LightingInfo light) {
+                                          WaterDepthInfo depthInfo, float time, vec2 gradient, SkyAtmosphere sky, LightingInfo light, float dynamicRoughness) {
     WaterLightingResult result;
     
-    float waveHeight = getWaveHeight(pos.xz, time);
-    result.dynamicRoughness = calculateWaterRoughness(gradient, waveHeight);
+    result.dynamicRoughness = dynamicRoughness;
     
     vec3 F = getFresnel(viewDir, normal);
     result.reflectedDir = reflect(-viewDir, normal);
@@ -454,15 +460,19 @@ WaterShadingResult shadeWater(WaterShadingParams params) {
     // Calculate water depth and base color
     WaterDepthInfo depthInfo = calculateWaterDepthAndColor(params.pos, params.normal, params.viewDir, params.floorParams);
     
+    // Compute roughness once (used by both reflection and lighting)
+    float waveHeight = getWaveHeight(params.pos.xz, params.time);
+    float dynamicRoughness = calculateWaterRoughness(params.gradient, waveHeight);
+    
     // Calculate refracted color
     vec3 refractedColor = calculateRefractedColor(params.pos, params.normal, params.viewDir, depthInfo, params.time, params.floorParams, params.sky);
     
-    // Calculate reflected color
-    vec3 reflectedColor = calculateReflectedColor(params.pos, params.normal, params.viewDir, params.time, params.gradient, params.sky);
+    // Calculate reflected color (pass precomputed roughness)
+    vec3 reflectedColor = calculateReflectedColor(params.pos, params.normal, params.viewDir, params.time, params.gradient, params.sky, dynamicRoughness);
     
-    // Calculate final lighting
+    // Calculate final lighting (pass precomputed roughness)
     WaterLightingResult lighting = calculateWaterLighting(params.pos, params.normal, params.viewDir, refractedColor, reflectedColor, 
-                                                          depthInfo, params.time, params.gradient, params.sky, params.light);
+                                                          depthInfo, params.time, params.gradient, params.sky, params.light, dynamicRoughness);
     
     result.color = lighting.color;
     result.dynamicRoughness = lighting.dynamicRoughness;

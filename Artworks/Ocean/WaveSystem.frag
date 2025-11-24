@@ -42,7 +42,7 @@ vec2 getWaveDir(int i) {
 
 // Wave amplitudes (m) - follows realistic ocean spectrum (Phillips-like distribution)
 // Primary swell dominates, with proper falloff for detail waves
-float waveAmps[NUM_WAVES] = float[](
+const float waveAmps[NUM_WAVES] = float[](
     1.4,  // Primary swell - largest
     0.55, // Secondary swell
     0.35, // Tertiary swell
@@ -57,7 +57,7 @@ float waveAmps[NUM_WAVES] = float[](
 
 // Wave frequencies (rad/m) - proper spectrum distribution
 // Lower frequencies (longer waves) have more energy, following ocean physics
-float waveFreqs[NUM_WAVES] = float[](
+const float waveFreqs[NUM_WAVES] = float[](
     0.12, // Primary swell - very long wavelength (~52m)
     0.20, // Secondary swell
     0.32, // Tertiary swell

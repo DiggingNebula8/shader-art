@@ -36,6 +36,7 @@ struct TerrainShadingParams {
 // ============================================================================
 
 // Realistic Caustics Calculation
+// Note: floorParams parameter reserved for future use (e.g., material-based caustics modulation)
 vec3 calculateCaustics(vec3 floorPos, vec3 waterSurfacePos, vec3 waterNormal, vec3 sunDir, float time, TerrainParams floorParams) {
     float eta = AIR_IOR / WATER_IOR;
     vec3 refractedSunDir = refractRay(-sunDir, waterNormal, eta);
