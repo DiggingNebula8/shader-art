@@ -14,6 +14,7 @@
 
 #include "Common.frag"
 #include "SkySystem.frag"
+#include "TerrainSystem.frag"
 
 // ============================================================================
 // WAVE PARAMETERS
@@ -109,66 +110,6 @@ const float AIR_IOR = 1.0;    // Index of refraction for air
 // Deep: Darker blue but still vibrant (not too dark)
 const vec3 deepWaterColor = vec3(0.0, 0.2, 0.4);   // Darker blue, more vibrant
 const vec3 shallowWaterColor = vec3(0.0, 0.5, 0.75); // Bright turquoise
-
-// ============================================================================
-// OCEAN FLOOR TERRAIN
-// ============================================================================
-
-struct OceanFloorParams {
-    float baseDepth;        // Base depth of the ocean floor (negative Y value)
-    float heightVariation;  // Maximum height variation from base depth
-    float largeScale;       // Large-scale terrain feature size
-    float mediumScale;      // Medium-scale terrain feature size
-    float smallScale;       // Small-scale terrain feature size (detail)
-    float largeAmplitude;   // Amplitude of large-scale features
-    float mediumAmplitude;  // Amplitude of medium-scale features
-    float smallAmplitude;   // Amplitude of small-scale features (detail)
-    float roughness;        // Overall terrain roughness (0.0 = smooth, 1.0 = rough)
-};
-
-// Default ocean floor parameters
-OceanFloorParams createDefaultOceanFloor() {
-    OceanFloorParams params;
-    params.baseDepth = -105.0;        // Base depth at -105m
-    params.heightVariation = 25.0;    // ±25m variation
-    params.largeScale = 0.02;          // Large features every ~50m
-    params.mediumScale = 0.08;         // Medium features every ~12.5m
-    params.smallScale = 0.3;           // Small features every ~3.3m
-    params.largeAmplitude = 0.6;       // Large features contribute 60%
-    params.mediumAmplitude = 0.3;      // Medium features contribute 30%
-    params.smallAmplitude = 0.1;       // Small features contribute 10%
-    params.roughness = 0.5;            // Moderate roughness
-    return params;
-}
-
-// Get ocean floor height at position (x, z)
-// Returns the Y coordinate of the ocean floor
-float getOceanFloorHeight(vec2 pos, OceanFloorParams params) {
-    // Large-scale terrain (hills, valleys)
-    float largeNoise = fractalNoise(pos, params.largeScale, 3, 0.5);
-    float largeHeight = (largeNoise - 0.5) * 2.0; // [-1, 1]
-    
-    // Medium-scale terrain (ridges, slopes)
-    float mediumNoise = fractalNoise(pos + vec2(100.0, 100.0), params.mediumScale, 2, 0.6);
-    float mediumHeight = (mediumNoise - 0.5) * 2.0; // [-1, 1]
-    
-    // Small-scale terrain (detail, bumps)
-    float smallNoise = fractalNoise(pos + vec2(200.0, 200.0), params.smallScale, 2, 0.7);
-    float smallHeight = (smallNoise - 0.5) * 2.0; // [-1, 1]
-    
-    // Combine all scales with their amplitudes
-    float heightVariation = largeHeight * params.largeAmplitude +
-                           mediumHeight * params.mediumAmplitude +
-                           smallHeight * params.smallAmplitude;
-    
-    // Apply roughness (adds more variation)
-    heightVariation *= (1.0 + params.roughness * 0.5);
-    
-    // Scale by height variation parameter and add to base depth
-    float floorHeight = params.baseDepth + heightVariation * params.heightVariation;
-    
-    return floorHeight;
-}
 
 // ============================================================================
 // GERSTNER WAVE FUNCTIONS
@@ -428,7 +369,7 @@ vec3 getSubsurfaceScattering(vec3 normal, vec3 viewDir, vec3 lightDir, float dep
 // ============================================================================
 
 // Raymarch through water to find the ocean floor
-vec3 raymarchThroughWater(vec3 startPos, vec3 rayDir, float time, OceanFloorParams floorParams) {
+vec3 raymarchThroughWater(vec3 startPos, vec3 rayDir, float time, TerrainParams floorParams) {
     float t = 0.0;
     const float MAX_WATER_DEPTH = 200.0;
     const float WATER_STEP_SIZE = 0.5;
@@ -436,7 +377,7 @@ vec3 raymarchThroughWater(vec3 startPos, vec3 rayDir, float time, OceanFloorPara
     for (int i = 0; i < 200; i++) {
         vec3 pos = startPos + rayDir * t;
         
-        float floorHeight = getOceanFloorHeight(pos.xz, floorParams);
+        float floorHeight = getTerrainHeight(pos.xz, floorParams);
         float distToFloor = pos.y - floorHeight;
         
         if (distToFloor < MIN_DIST) {
@@ -467,21 +408,8 @@ vec3 refractRay(vec3 incident, vec3 normal, float eta) {
     return eta * incident + (eta * cosI - cosT) * normal;
 }
 
-// Get ocean floor normal (for shading)
-vec3 getOceanFloorNormal(vec3 pos, OceanFloorParams floorParams) {
-    const float eps = 0.5;
-    
-    float hL = getOceanFloorHeight(pos.xz - vec2(eps, 0.0), floorParams);
-    float hR = getOceanFloorHeight(pos.xz + vec2(eps, 0.0), floorParams);
-    float hD = getOceanFloorHeight(pos.xz - vec2(0.0, eps), floorParams);
-    float hU = getOceanFloorHeight(pos.xz + vec2(0.0, eps), floorParams);
-    
-    vec3 normal = normalize(vec3(hL - hR, 2.0 * eps, hD - hU));
-    return normal;
-}
-
 // Realistic Caustics Calculation
-vec3 calculateCaustics(vec3 floorPos, vec3 waterSurfacePos, vec3 waterNormal, vec3 sunDir, float time, OceanFloorParams floorParams) {
+vec3 calculateCaustics(vec3 floorPos, vec3 waterSurfacePos, vec3 waterNormal, vec3 sunDir, float time, TerrainParams floorParams) {
     float eta = AIR_IOR / WATER_IOR;
     vec3 refractedSunDir = refractRay(-sunDir, waterNormal, eta);
     
@@ -547,7 +475,7 @@ vec3 calculateCaustics(vec3 floorPos, vec3 waterSurfacePos, vec3 waterNormal, ve
 }
 
 // Shade the ocean floor with caustics
-vec3 shadeOceanFloor(vec3 floorPos, vec3 viewDir, vec3 normal, float time, OceanFloorParams floorParams, SkyAtmosphere sky, vec3 waterSurfacePos, vec3 waterNormal) {
+vec3 shadeOceanFloor(vec3 floorPos, vec3 viewDir, vec3 normal, float time, TerrainParams floorParams, SkyAtmosphere sky, vec3 waterSurfacePos, vec3 waterNormal) {
     LightingInfo light = evaluateLighting(sky, time);
     vec3 sunDir = light.sunDirection;
     vec3 sunColor = light.sunColor;
@@ -556,8 +484,8 @@ vec3 shadeOceanFloor(vec3 floorPos, vec3 viewDir, vec3 normal, float time, Ocean
     const vec3 floorColorBase = vec3(0.3, 0.25, 0.2);
     const float floorRoughness = 0.8;
     
-    float floorHeight = getOceanFloorHeight(floorPos.xz, floorParams);
-    float depthVariation = (floorHeight - floorParams.baseDepth) / floorParams.heightVariation;
+    float floorHeight = getTerrainHeight(floorPos.xz, floorParams);
+    float depthVariation = (floorHeight - floorParams.baseHeight) / max(floorParams.heightVariation, 0.001);
     vec3 floorColor = mix(floorColorBase * 0.7, floorColorBase * 1.3, depthVariation * 0.5 + 0.5);
     
     float textureNoise = smoothNoise(floorPos.xz * 0.5) * 0.1;
@@ -639,10 +567,10 @@ struct WaterDepthInfo {
     vec3 waterColor;
 };
 
-WaterDepthInfo calculateWaterDepthAndColor(vec3 pos, vec3 normal, vec3 viewDir, OceanFloorParams floorParams) {
+WaterDepthInfo calculateWaterDepthAndColor(vec3 pos, vec3 normal, vec3 viewDir, TerrainParams floorParams) {
     WaterDepthInfo info;
     
-    float floorHeight = getOceanFloorHeight(pos.xz, floorParams);
+    float floorHeight = getTerrainHeight(pos.xz, floorParams);
     info.depth = max(pos.y - floorHeight, 0.1);
     
     info.depthFactor = 1.0 - exp(-info.depth * 0.05);
@@ -655,7 +583,7 @@ WaterDepthInfo calculateWaterDepthAndColor(vec3 pos, vec3 normal, vec3 viewDir, 
     return info;
 }
 
-vec3 calculateRefractedColor(vec3 pos, vec3 normal, vec3 viewDir, WaterDepthInfo depthInfo, float time, OceanFloorParams floorParams, SkyAtmosphere sky) {
+vec3 calculateRefractedColor(vec3 pos, vec3 normal, vec3 viewDir, WaterDepthInfo depthInfo, float time, TerrainParams floorParams, SkyAtmosphere sky) {
     float eta = AIR_IOR / WATER_IOR;
     vec3 refractedDir = refractRay(-viewDir, normal, eta);
     
@@ -672,7 +600,7 @@ vec3 calculateRefractedColor(vec3 pos, vec3 normal, vec3 viewDir, WaterDepthInfo
         
         if (hitFloor > 0.5) {
             vec3 floorPos = pos + refractedDir * waterPathLength;
-            vec3 floorNormal = getOceanFloorNormal(floorPos, floorParams);
+            vec3 floorNormal = getTerrainNormal(floorPos, floorParams);
             
             vec3 floorColor = shadeOceanFloor(floorPos, -refractedDir, floorNormal, time, floorParams, sky, pos, normal);
             
@@ -860,16 +788,7 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient, 
     LightingInfo light = evaluateLighting(sky, time);
     
     // Use default ocean floor params
-    OceanFloorParams floorParams;
-    floorParams.baseDepth = -105.0;
-    floorParams.heightVariation = 25.0;
-    floorParams.largeScale = 0.02;
-    floorParams.mediumScale = 0.08;
-    floorParams.smallScale = 0.3;
-    floorParams.largeAmplitude = 0.6;
-    floorParams.mediumAmplitude = 0.3;
-    floorParams.smallAmplitude = 0.1;
-    floorParams.roughness = 0.5;
+    TerrainParams floorParams = createDefaultOceanFloor();
     
     // Calculate water depth and base color
     WaterDepthInfo depthInfo = calculateWaterDepthAndColor(pos, normal, viewDir, floorParams);
