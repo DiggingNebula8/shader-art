@@ -175,6 +175,10 @@ cam.up = vec3(0.0, 1.0, 0.0);
 vec2 uv = fragCoord / iResolution.xy;
 vec3 rd = generateCameraRay(cam, uv, iResolution.xy);
 
+// Create materials
+WaterMaterial waterMaterial = createDefaultWaterMaterial();
+TerrainMaterial terrainMaterial = createDefaultTerrainMaterial();
+
 // Render scene (using RenderPipeline)
 RenderContext ctx;
 ctx.cameraPos = cam.position;
@@ -183,6 +187,8 @@ ctx.time = iTime;
 ctx.sky = createSkyPreset_ClearDay();
 ctx.terrainParams = createDefaultOceanFloor();
 ctx.camera = cam;
+ctx.waterMaterial = waterMaterial;
+ctx.terrainMaterial = terrainMaterial;
 
 RenderResult result = renderScene(ctx);
 vec3 color = result.color;
@@ -217,6 +223,14 @@ cam.enableDOF = true;
 cam.focusDistance = 5.0;  // Focus at 5 meters
 cam.fStop = 1.4;          // Wide aperture for shallow DOF
 
+// Generate camera ray
+vec2 uv = fragCoord / iResolution.xy;
+vec3 rd = generateCameraRay(cam, uv, iResolution.xy);
+
+// Create materials
+WaterMaterial waterMaterial = createDefaultWaterMaterial();
+TerrainMaterial terrainMaterial = createDefaultTerrainMaterial();
+
 // Render scene (using RenderPipeline)
 RenderContext ctx;
 ctx.cameraPos = cam.position;
@@ -225,6 +239,8 @@ ctx.time = iTime;
 ctx.sky = createSkyPreset_ClearDay();
 ctx.terrainParams = createDefaultOceanFloor();
 ctx.camera = cam;
+ctx.waterMaterial = waterMaterial;
+ctx.terrainMaterial = terrainMaterial;
 
 RenderResult result = renderScene(ctx);
 vec3 color = result.color;

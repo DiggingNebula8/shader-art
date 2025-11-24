@@ -223,8 +223,9 @@ TerrainMaterial terrainMat = createDefaultTerrainMaterial();
 RenderContext ctx;
 // ... set other context fields ...
 ctx.waterMaterial = waterMat;
+ctx.terrainMaterial = terrainMat;
 
-// RenderPipeline will use the material automatically
+// RenderPipeline will use the materials automatically
 RenderResult result = renderScene(ctx);
 ```
 

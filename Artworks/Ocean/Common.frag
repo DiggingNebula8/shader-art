@@ -27,7 +27,7 @@
 // Physical Material Constants:
 //   - WATER_F0: vec3(0.018, 0.019, 0.020) - Wavelength-dependent Fresnel F0 (physical constant)
 //
-// Note: Art-directable materials (WaterMaterial, etc.) are defined in MaterialSystem.frag
+// Note: Art-directable materials (WaterMaterial, TerrainMaterial, etc.) are defined in MaterialSystem.frag
 //
 // ============================================================================
 
