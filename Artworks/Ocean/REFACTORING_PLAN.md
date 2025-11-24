@@ -74,12 +74,6 @@ Scene.frag (or RenderPipeline.frag)
    - Main source of truth for all raymarching
    - Systems provide SDFs via macros, VolumeRaymarching handles algorithm
 
-4. **TerrainShading.frag** (extract from OceanSystem)
-   - Terrain material properties
-   - `shadeTerrain()` - shades terrain with caustics
-   - Terrain-specific lighting and material functions
-   - Uses TerrainParams for configuration
-
 5. **RenderPipeline.frag** (new orchestration layer)
    - Coordinates all systems
    - Defines clear interfaces between systems
