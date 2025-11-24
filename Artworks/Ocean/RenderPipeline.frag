@@ -12,10 +12,11 @@
 //   - WaveSystem (wave geometry)
 //   - TerrainSystem (terrain geometry)
 //   - ObjectSystem (object geometry)
-//   - WaterShading (water material properties)
+//   - WaterShading (water material properties, includes translucency via DistanceFieldSystem)
 //   - TerrainShading (terrain material properties)
 //   - SkySystem (atmosphere and lighting)
 //   - VolumeRaymarching (unified raymarching algorithm)
+//   - DistanceFieldSystem (distance field queries for translucency and other effects)
 //
 // Main Function:
 //   - renderScene() - Called by Scene.frag to render the entire scene

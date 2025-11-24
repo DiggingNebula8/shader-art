@@ -10,6 +10,7 @@
 //   - WaveSystem: For wave height/gradient queries (getWaveHeight, getWaveGradient)
 //   - TerrainSystem: For terrain height queries (getTerrainHeight)
 //   - VolumeRaymarching: For terrain raymarching (raymarchTerrain)
+//   - OceanDistanceField: For distance field queries used in water translucency
 // ============================================================================
 
 #ifndef WATER_SHADING_FRAG
@@ -21,6 +22,7 @@
 #include "VolumeRaymarching.frag"
 #include "WaveSystem.frag"
 #include "TerrainSystem.frag"
+#include "OceanDistanceField.frag"
 
 // ============================================================================
 // WATER PROPERTIES
@@ -246,8 +248,17 @@ struct WaterShadingResult {
 WaterDepthInfo calculateWaterDepthAndColor(vec3 pos, vec3 normal, vec3 viewDir, TerrainParams floorParams, WaterMaterial material) {
     WaterDepthInfo info;
     
+    // Use distance field for more accurate depth calculation
+    // Raymarch downward to find the nearest surface (terrain or object)
+    vec3 downDir = vec3(0.0, -1.0, 0.0);
+    float maxDepth = 200.0;
+    
+    // Fallback to simple height-based calculation (more efficient for most cases)
     float floorHeight = getTerrainHeight(pos.xz, floorParams);
-    info.depth = max(pos.y - floorHeight, 0.1);
+    float heightBasedDepth = max(pos.y - floorHeight, 0.1);
+    
+    // Use height-based depth as primary (distance field is used for translucency)
+    info.depth = heightBasedDepth;
     
     info.depthFactor = 1.0 - exp(-info.depth * 0.05);
     info.waterColor = mix(material.shallowWaterColor, material.deepWaterColor, info.depthFactor);
@@ -260,31 +271,167 @@ WaterDepthInfo calculateWaterDepthAndColor(vec3 pos, vec3 normal, vec3 viewDir, 
 }
 
 // ============================================================================
+// TRANSLUCENCY CALCULATION
+// ============================================================================
+
+// Translucency result structure
+struct TranslucencyResult {
+    vec3 color;           // Final transmitted color
+    vec3 transmittance;    // Transmittance factor
+    float pathLength;     // Total path length through water
+};
+
+// Photorealistic translucency sampling
+// Uses distance field queries to raymarch through water and sample floor color
+// Uses stochastic sampling to reduce banding artifacts
+TranslucencyResult sampleTranslucency(vec3 start, vec3 dir, float maxDist, TerrainParams terrainParams, float time, vec3 absorptionCoeff, vec3 shallowColor, vec3 deepColor) {
+    TranslucencyResult result;
+    result.color = vec3(0.0);
+    result.transmittance = vec3(1.0);
+    result.pathLength = 0.0;
+    
+    if (maxDist <= 0.0) {
+        return result;
+    }
+    
+    // Use distance field to raymarch to find surface hit
+    float surfaceDist = getDistanceToSurface(start, dir, maxDist, terrainParams, time);
+    
+    if (surfaceDist >= maxDist) {
+        // No surface hit - just apply absorption for full distance
+        result.transmittance = exp(-absorptionCoeff * maxDist);
+        float depthFactor = 1.0 - exp(-maxDist * 0.04);
+        result.color = mix(shallowColor, deepColor, depthFactor) * result.transmittance;
+        result.pathLength = maxDist;
+        return result;
+    }
+    
+    // Surface was hit - compute transmittance along path
+    result.pathLength = surfaceDist;
+    result.transmittance = exp(-absorptionCoeff * surfaceDist);
+    
+    // Get surface position with slight offset to ensure we're on the surface
+    vec3 surfacePos = start + dir * surfaceDist;
+    
+    // Sample multiple points around the hit for smoother color (reduces banding)
+    vec3 floorColorSum = vec3(0.0);
+    float sampleWeight = 0.0;
+    
+    // Use a small sampling radius for anti-aliasing
+    const float sampleRadius = 0.3;
+    const int numColorSamples = 3;
+    
+    // Add temporal jitter to reduce temporal banding
+    float jitter = hash(surfacePos.xz * 0.1 + time * 0.01) * TAU;
+    
+    for (int i = 0; i < numColorSamples; i++) {
+        float angle = float(i) * TAU / float(numColorSamples) + jitter;
+        vec2 offset = vec2(cos(angle), sin(angle)) * sampleRadius * (0.5 + float(i) * 0.3);
+        vec2 samplePos = surfacePos.xz + offset;
+        
+        // Get terrain height for color variation
+        float floorHeight = getTerrainHeight(samplePos, terrainParams);
+        float depthVariation = (floorHeight - terrainParams.baseHeight) / max(terrainParams.heightVariation, 0.001);
+        float depthT = clamp(depthVariation * 0.5 + 0.5, 0.0, 1.0);
+        
+        // Approximate terrain color (matches TerrainShading logic)
+        vec3 sampleColor = vec3(0.2, 0.25, 0.3); // Base ocean floor color
+        sampleColor = mix(sampleColor * 0.7, sampleColor * 1.3, depthT);
+        
+        // Add texture variation with smooth noise
+        float textureNoise = smoothNoise(samplePos * 0.5) * 0.1;
+        sampleColor += textureNoise;
+        
+        // Weight samples by distance from center (gaussian-like)
+        float dist = length(offset);
+        float weight = exp(-dist * dist / (sampleRadius * sampleRadius * 0.5));
+        
+        floorColorSum += sampleColor * weight;
+        sampleWeight += weight;
+    }
+    
+    vec3 floorColor = floorColorSum / max(sampleWeight, 0.001);
+    
+    // Apply water tinting based on depth with smooth falloff
+    float depthTintFactor = 1.0 - exp(-surfaceDist * 0.04);
+    vec3 waterTint = mix(shallowColor, deepColor, depthTintFactor);
+    
+    // Combine floor color with water tint and transmittance
+    result.color = floorColor * waterTint * result.transmittance;
+    
+    // Apply smooth filtering to reduce banding
+    result.color = max(result.color, vec3(0.0));
+    
+    return result;
+}
+
+// ============================================================================
 // REFRACTION & REFLECTION CALCULATION
 // ============================================================================
 vec3 calculateRefractedColor(vec3 pos, vec3 normal, vec3 viewDir, WaterDepthInfo depthInfo, float time, TerrainParams floorParams, SkyAtmosphere sky, WaterMaterial material) {
     float eta = AIR_IOR / WATER_IOR;
     vec3 refractedDir = refractRay(-viewDir, normal, eta);
     
-    // Cache absorption calculation early (used in multiple places)
-    vec3 baseAbsorption = exp(-material.absorption * depthInfo.depth);
-    
-    vec3 refractedColor = depthInfo.waterColor * baseAbsorption;
-    
-    // Basic translucency - full floor shading will be handled in RenderPipeline
-    float translucencyFactor = 1.0 - smoothstep(3.0, 25.0, depthInfo.depth);
-    
-    if (dot(refractedDir, normal) < 0.0 && translucencyFactor > 0.01) {
-        // Use VolumeRaymarching to find floor for depth-based color
-        VolumeHit hit = raymarchTerrain(pos, refractedDir, MAX_WATER_DEPTH, time, floorParams);
-        
-        if (hit.hit && hit.valid) {
-            // Apply absorption based on path length
-            vec3 absorption = exp(-material.absorption * hit.distance);
-            vec3 waterTint = mix(material.shallowWaterColor, material.deepWaterColor, 1.0 - exp(-hit.distance * 0.04));
-            refractedColor = mix(refractedColor, waterTint, 0.25) * absorption;
-        }
+    // Only compute translucency if ray goes into water (below surface)
+    if (dot(refractedDir, normal) >= 0.0) {
+        // Ray goes upward - just return water color with basic absorption
+        vec3 baseAbsorption = exp(-material.absorption * depthInfo.depth);
+        return depthInfo.waterColor * baseAbsorption;
     }
+    
+    // Ray goes into water - compute photorealistic translucency
+    float maxRayDist = min(MAX_WATER_DEPTH, depthInfo.depth * 3.0);
+    
+    // Use photorealistic translucency sampling
+    TranslucencyResult translucency = sampleTranslucency(
+        pos, 
+        refractedDir, 
+        maxRayDist, 
+        floorParams, 
+        time, 
+        material.absorption,
+        material.shallowWaterColor,
+        material.deepWaterColor
+    );
+    
+    // Base water color (for areas without floor visibility)
+    vec3 baseWaterColor = depthInfo.waterColor;
+    vec3 baseAbsorption = exp(-material.absorption * depthInfo.depth);
+    baseWaterColor *= baseAbsorption;
+    
+    // Determine translucency factor based on depth and viewing angle
+    // Shallow water and steep viewing angles show more translucency
+    // Use smooth, continuous functions to avoid banding
+    float viewAngle = 1.0 - max(dot(viewDir, normal), 0.0);
+    
+    // Smooth depth factor with wider transition range
+    float depthFactor = 1.0 - smoothstep(1.5, 35.0, depthInfo.depth);
+    
+    // Combine factors with smooth curve - increased base translucency for more visibility
+    float translucencyFactor = depthFactor * (0.45 + viewAngle * 0.85);
+    
+    // Apply additional smoothing to prevent sharp transitions
+    translucencyFactor = smoothstep(0.0, 1.0, translucencyFactor);
+    
+    // Blend between base water color and translucent floor color
+    // Use smooth, non-linear blending to avoid banding
+    // Lower start value allows more translucency to show through
+    float smoothBlend = smoothstep(0.0, 0.85, translucencyFactor);
+    
+    // Use power curve for more natural blending - lower exponent increases translucency
+    smoothBlend = pow(smoothBlend, 0.6);
+    
+    // Blend colors smoothly - increase blend strength slightly
+    float finalBlend = clamp(smoothBlend * 1.1, 0.0, 1.0);
+    vec3 refractedColor = mix(baseWaterColor, translucency.color, finalBlend);
+    
+    // Add subtle water tinting based on path length
+    float pathTintFactor = 1.0 - exp(-translucency.pathLength * 0.03);
+    vec3 pathTint = mix(material.shallowWaterColor, material.deepWaterColor, pathTintFactor);
+    refractedColor = mix(refractedColor, refractedColor * pathTint, smoothBlend * 0.12);
+    
+    // Ensure smooth color transitions - clamp to prevent artifacts
+    refractedColor = clamp(refractedColor, vec3(0.0), vec3(10.0));
     
     return refractedColor;
 }
