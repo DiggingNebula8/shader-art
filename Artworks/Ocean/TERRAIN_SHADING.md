@@ -6,6 +6,7 @@ The Terrain Shading System provides material properties and shading functions fo
 
 ## Dependencies
 
+- **MaterialSystem**: For terrain material properties (`TerrainMaterial`)
 - **SkySystem**: For lighting information and sky configuration
 - **TerrainSystem**: For terrain height queries
 - **WaveSystem**: For wave height/gradient queries (for caustics)
@@ -26,6 +27,7 @@ struct TerrainShadingParams {
     SkyAtmosphere sky;           // Sky configuration
     vec3 waterSurfacePos;        // Water surface position (for caustics)
     vec3 waterNormal;            // Water surface normal (for caustics)
+    TerrainMaterial material;    // Terrain material properties (art-directable)
 };
 ```
 
@@ -47,8 +49,12 @@ Main terrain shading function. Shades terrain with PBR lighting and caustics.
 
 **Example:**
 ```glsl
+#include "MaterialSystem.frag"
 #include "TerrainShading.frag"
 #include "SkySystem.frag"
+
+// Create terrain material
+TerrainMaterial terrainMat = createDefaultTerrainMaterial();
 
 TerrainShadingParams params;
 params.pos = terrainPos;
@@ -60,6 +66,7 @@ params.light = evaluateLighting(sky, time);
 params.sky = sky;
 params.waterSurfacePos = waterPos;
 params.waterNormal = waterNormal;
+params.material = terrainMat;
 
 vec3 color = shadeTerrain(params);
 ```
@@ -108,21 +115,28 @@ vec3 caustics = calculateCaustics(
 
 ## Shading Details
 
-### Base Color
-- **Base color**: `vec3(0.3, 0.25, 0.2)` - Brownish terrain color
-- **Depth variation**: Color varies based on height relative to base height
-- **Texture noise**: Adds detail using `smoothNoise()`
+### Material Properties
+
+Terrain shading uses `TerrainMaterial` from MaterialSystem to configure:
+- **Base color**: `material.baseColor` - Base terrain color
+- **Deep color**: `material.deepColor` - Color for deeper areas
+- **Roughness**: `material.roughness` - Surface roughness (0.0 = smooth, 1.0 = rough)
+- **Specular power**: `material.specularPower` - Phong specular power
+- **Ambient factor**: `material.ambientFactor` - Ambient lighting factor
+- **Specular intensity**: `material.specularIntensity` - Specular highlight intensity
 
 ### Lighting Components
 
-1. **Ambient**: `floorColor * 0.1` - Base ambient lighting
+1. **Ambient**: `floorColor * material.ambientFactor` - Base ambient lighting
 2. **Diffuse**: `floorColor * sunColor * sunIntensity * NdotL` - Direct lighting
-3. **Specular**: Phong-style specular with power 32.0
+3. **Specular**: Phong-style specular with `material.specularPower` and `material.specularIntensity`
 4. **Caustics**: Calculated if sun is above horizon and water is above terrain
 
-### Roughness
-- **Floor roughness**: `0.8` - Relatively rough surface
-- **Specular**: Reduced by roughness factor
+### Depth Variation
+- Color blends between `material.baseColor` and `material.deepColor` based on height
+- Texture noise adds detail using `smoothNoise()`
+
+See `MATERIAL_SYSTEM.md` for complete TerrainMaterial documentation and presets.
 
 ---
 
@@ -130,9 +144,13 @@ vec3 caustics = calculateCaustics(
 
 ### Basic Terrain Shading
 ```glsl
+#include "MaterialSystem.frag"
 #include "TerrainShading.frag"
 #include "TerrainSystem.frag"
 #include "SkySystem.frag"
+
+// Create terrain material
+TerrainMaterial terrainMat = createDefaultTerrainMaterial();
 
 // Get terrain height and normal
 float height = getTerrainHeight(pos.xz, terrainParams);
@@ -150,8 +168,22 @@ params.light = evaluateLighting(sky, time);
 params.sky = sky;
 params.waterSurfacePos = waterPos;
 params.waterNormal = waterNormal;
+params.material = terrainMat;
 
 // Shade terrain
+vec3 color = shadeTerrain(params);
+```
+
+### Using Material Presets
+```glsl
+// Use sandy terrain material
+TerrainMaterial sandyMat = createSandyTerrainMaterial();
+
+// Or rocky terrain
+TerrainMaterial rockyMat = createRockyTerrainMaterial();
+
+// Use in shading
+params.material = sandyMat;
 vec3 color = shadeTerrain(params);
 ```
 

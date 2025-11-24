@@ -6,6 +6,7 @@ The Water Shading System provides physically-based rendering (PBR) functions for
 
 ## Dependencies
 
+- **MaterialSystem**: For water material properties (`WaterMaterial`)
 - **WaveSystem**: For wave height/gradient queries (`getWaveHeight`, `getWaveGradient`)
 - **TerrainSystem**: For terrain height queries (`getTerrainHeight`)
 - **VolumeRaymarching**: For terrain raymarching (`raymarchTerrain`)
@@ -351,51 +352,25 @@ Applies complete PBR lighting to water.
 
 ## Water Material
 
-Water material properties are art-directable through the `WaterMaterial` struct, allowing tweaking without shader recompilation.
+Water material properties are art-directable through the `WaterMaterial` struct from MaterialSystem, allowing tweaking without shader recompilation.
 
-### `WaterMaterial` Structure
+**See `MATERIAL_SYSTEM.md` for complete WaterMaterial documentation**, including:
+- `WaterMaterial` structure definition
+- Factory functions (`createDefaultWaterMaterial()`, `createClearTropicalWater()`, `createMurkyWater()`, `createChoppyWater()`)
+- Preset configurations and usage examples
 
-```glsl
-struct WaterMaterial {
-    vec3 absorption;          // Water absorption coefficients (m^-1) - RGB channels
-    vec3 deepWaterColor;     // Color for deep water (darker blue)
-    vec3 shallowWaterColor;  // Color for shallow water (bright turquoise)
-    float baseRoughness;     // Base roughness for calm water (very smooth)
-    float maxRoughness;      // Maximum roughness for choppy water
-};
-```
+### Quick Reference
 
-### Preset Functions
-
-#### `WaterMaterial createDefaultWaterMaterial()`
-Creates realistic ocean water material with default values:
-- **`absorption`**: `vec3(0.15, 0.045, 0.015)` m⁻¹ - Realistic absorption (red absorbed most)
-- **`deepWaterColor`**: `vec3(0.0, 0.2, 0.4)` - Darker blue for deep water
-- **`shallowWaterColor`**: `vec3(0.0, 0.5, 0.75)` - Bright turquoise for shallow water
-- **`baseRoughness`**: `0.03` - Very smooth calm water
-- **`maxRoughness`**: `0.12` - Choppy water maximum
-
-#### `WaterMaterial createClearTropicalWater()`
-Creates clear tropical water preset:
-- Less absorption (clearer water)
-- Brighter colors (more cyan)
-- Suitable for tropical/caribbean scenes
-
-#### `WaterMaterial createMurkyWater()`
-Creates murky/muddy water preset:
-- High absorption (murky water)
-- Brownish colors
-- Suitable for rivers, lakes, or polluted water
-
-#### `WaterMaterial createChoppyWater()`
-Creates rough/choppy water preset:
-- Higher base and max roughness
-- Suitable for stormy or windy conditions
+The `WaterMaterial` struct includes:
+- `absorption` - Water absorption coefficients (m^-1) - RGB channels
+- `deepWaterColor` - Color for deep water (darker blue)
+- `shallowWaterColor` - Color for shallow water (bright turquoise)
+- `baseRoughness` - Base roughness for calm water (very smooth)
+- `maxRoughness` - Maximum roughness for choppy water
 
 ### Physical Constants
 
-These remain as compile-time constants (physical properties):
-
+Physical constants (not art-directable) are defined in `Common.frag`:
 - **`WATER_F0`**: `vec3(0.018, 0.019, 0.020)` - Fresnel F0 for water-air interface (based on IOR)
 - **`WATER_IOR`**: `1.33` - Index of refraction for water
 - **`AIR_IOR`**: `1.0` - Index of refraction for air

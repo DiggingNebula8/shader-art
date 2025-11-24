@@ -14,6 +14,7 @@ The Render Pipeline orchestrates all rendering systems to produce the final scen
 ## Dependencies
 
 The Render Pipeline includes and coordinates:
+- **MaterialSystem**: Material properties and factory functions
 - **WaveSystem**: Wave geometry and raymarching
 - **TerrainSystem**: Terrain geometry and raymarching
 - **WaterShading**: Water material properties and PBR shading
@@ -219,6 +220,7 @@ The Render Pipeline coordinates systems in this order:
 
 ### Basic Usage
 ```glsl
+#include "MaterialSystem.frag"
 #include "RenderPipeline.frag"
 #include "SkySystem.frag"
 
