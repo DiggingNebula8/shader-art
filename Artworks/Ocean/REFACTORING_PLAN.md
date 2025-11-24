@@ -94,17 +94,17 @@ Scene.frag (or RenderPipeline.frag)
 - [x] Update OceanSystem to include WaveSystem (temporary during transition)
 
 ### Phase 2: Create Unified Volume Raymarching
-- [ ] Create `VolumeRaymarching.frag` - MAIN RAYMARCHING SOURCE
-- [ ] Design include-based SDF interface (GLSL-compatible)
-- [ ] Implement `raymarchVolume()` - generic volume raymarching algorithm
-- [ ] Implement `raymarchSurface()` - surface intersection algorithm
-- [ ] Move existing raymarching logic from OceanSystem:
-  - [ ] `raymarchOcean()` → becomes `raymarchWaveSurface()` wrapper
-  - [ ] `raymarchThroughWater()` → becomes `raymarchTerrain()` wrapper using volume raymarching
-- [ ] Create system-specific raymarch wrappers:
-  - [ ] WaveSystem: `raymarchWaveSurface()` - wraps VolumeRaymarching with getWaveSDF
-  - [ ] TerrainSystem: `raymarchTerrain()` - wraps VolumeRaymarching with getTerrainSDF
-- [ ] Test with WaveSystem first (prototype)
+- [x] Create `VolumeRaymarching.frag` - MAIN RAYMARCHING SOURCE
+- [x] Design include-based SDF interface (GLSL-compatible)
+- [x] Implement `raymarchVolumeCore()` - generic volume raymarching algorithm
+- [x] Implement `raymarchSurfaceCore()` - surface intersection algorithm
+- [x] Move existing raymarching logic from OceanSystem:
+  - [x] `raymarchOcean()` → becomes `raymarchWaveSurface()` wrapper
+  - [x] `raymarchThroughWater()` → becomes `raymarchTerrain()` wrapper using volume raymarching
+- [x] Create system-specific raymarch wrappers:
+  - [x] WaveSystem: `raymarchWaveSurface()` - wraps VolumeRaymarching with getWaveSDF
+  - [x] TerrainSystem: `raymarchTerrain()` - wraps VolumeRaymarching with getTerrainSDF
+- [x] Update OceanSystem to use new wrappers (backward compatible)
 
 ### Phase 3: Extract Water Shading
 - [ ] Create `WaterShading.frag`

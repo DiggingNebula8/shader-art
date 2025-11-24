@@ -212,5 +212,34 @@ float getWaveSDF(vec3 pos, float time) {
     return pos.y - getWaveHeight(pos.xz, time);
 }
 
+// ============================================================================
+// RAYMARCHING WRAPPER
+// ============================================================================
+
+// Include VolumeRaymarching for VolumeHit struct and core algorithms
+// Note: The core functions use getSDF() which must be defined via macro
+// before calling them. We define it in the wrapper function.
+#include "VolumeRaymarching.frag"
+
+// System-specific raymarch wrapper for wave surface
+// Uses VolumeRaymarching core algorithm with getWaveSDF
+VolumeHit raymarchWaveSurface(vec3 start, vec3 dir, float maxDist, float time) {
+    // Define SDF function macro for raymarching algorithm
+    #define getSDF(pos, time) getWaveSDF(pos, time)
+    
+    // Use raymarching algorithm macro
+    VolumeHit hit;
+    RAYMARCH_SURFACE_CORE(start, dir, maxDist, time, hit);
+    
+    // Calculate normal using system-specific function
+    if (hit.hit && hit.valid) {
+        vec2 gradient;
+        hit.normal = getNormal(hit.position.xz, time, gradient);
+    }
+    
+    #undef getSDF
+    return hit;
+}
+
 #endif // WAVE_SYSTEM_FRAG
 

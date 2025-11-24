@@ -13,6 +13,7 @@
 #define OCEAN_SYSTEM_FRAG
 
 #include "Common.frag"
+#include "VolumeRaymarching.frag"  // VolumeHit struct and raymarching core
 #include "WaveSystem.frag"  // Wave geometry functions
 #include "SkySystem.frag"
 #include "TerrainSystem.frag"
@@ -178,30 +179,15 @@ vec3 getSubsurfaceScattering(vec3 normal, vec3 viewDir, vec3 lightDir, float dep
 // ============================================================================
 
 // Raymarch through water to find the ocean floor
+// Compatibility wrapper - uses VolumeRaymarching system via TerrainSystem
 vec3 raymarchThroughWater(vec3 startPos, vec3 rayDir, float time, TerrainParams floorParams) {
-    float t = 0.0;
     const float MAX_WATER_DEPTH = 200.0;
-    const float WATER_STEP_SIZE = 0.5;
     
-    for (int i = 0; i < 200; i++) {
-        vec3 pos = startPos + rayDir * t;
-        
-        float floorHeight = getTerrainHeight(pos.xz, floorParams);
-        float distToFloor = pos.y - floorHeight;
-        
-        if (distToFloor < MIN_DIST) {
-            return vec3(1.0, t, 0.0);
-        }
-        
-        if (t > MAX_WATER_DEPTH || distToFloor > 50.0) {
-            break;
-        }
-        
-        float stepSize = clamp(distToFloor * 0.3, WATER_STEP_SIZE, 2.0);
-        t += stepSize;
-    }
+    // Use unified raymarching system
+    VolumeHit hit = raymarchTerrain(startPos, rayDir, MAX_WATER_DEPTH, time, floorParams);
     
-    return vec3(0.0, t, 0.0);
+    // Return vec3(hit, distance, 0.0) for backward compatibility
+    return vec3(hit.hit ? 1.0 : 0.0, hit.distance, 0.0);
 }
 
 // Calculate refracted ray direction using Snell's law
@@ -619,46 +605,14 @@ vec3 shadeOcean(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient, 
 // RAYMARCHING
 // ============================================================================
 
+// Raymarch ocean surface
+// Compatibility wrapper - uses VolumeRaymarching system via WaveSystem
 vec3 raymarchOcean(vec3 ro, vec3 rd, float time) {
-    float t = 0.0;
-    float prevH = 1e10;
+    // Use unified raymarching system
+    VolumeHit hit = raymarchWaveSurface(ro, rd, MAX_DIST, time);
     
-    for (int i = 0; i < MAX_STEPS; i++) {
-        vec3 pos = ro + rd * t;
-        float h = pos.y - getWaveHeight(pos.xz, time);
-        
-        // More stable convergence check with small bias
-        if (abs(h) < MIN_DIST * 1.5) {
-            // Refine position for better precision
-            vec3 refinedPos = pos;
-            if (abs(h) > MIN_DIST * 0.5) {
-                // Take a small step back and forward to find better position
-                float refineStep = h * 0.3;
-                refinedPos = ro + rd * (t - refineStep);
-                float hRefined = refinedPos.y - getWaveHeight(refinedPos.xz, time);
-                if (abs(hRefined) < abs(h)) {
-                    pos = refinedPos;
-                }
-            }
-            return pos;
-        }
-        
-        if (t > MAX_DIST) break;
-        
-        // More stable stepping - avoid oscillation
-        float stepSize = clamp(h * 0.4, MIN_DIST * 0.5, 1.0);
-        
-        // Prevent oscillation by checking if we're getting closer
-        if (abs(h) > abs(prevH) * 1.1 && i > 2) {
-            // We're moving away, take smaller step
-            stepSize = MIN_DIST;
-        }
-        
-        prevH = h;
-        t += stepSize;
-    }
-    
-    return ro + rd * MAX_DIST;
+    // Return position for backward compatibility
+    return hit.position;
 }
 
 #endif // OCEAN_SYSTEM_FRAG
