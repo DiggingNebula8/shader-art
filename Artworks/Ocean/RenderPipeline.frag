@@ -206,9 +206,21 @@ RenderResult renderScene(float time, RenderContext ctx) {
     
     // Calculate gradient for water shading
     if (surfaceHit.hit) {
+        // Stabilize position to reduce jittering
+        // Use a small snap grid for XZ to ensure consistent sampling
+        // Recalculate Y from the snapped XZ to maintain accuracy
+        const float positionSnap = 0.0005;
+        vec2 snappedXZ = floor(surfaceHit.position.xz / positionSnap + 0.5) * positionSnap;
+        float stableY = getWaveHeight(snappedXZ, ctx.time);
+        vec3 stablePos = vec3(snappedXZ.x, stableY, snappedXZ.y);
+        
+        // Calculate normal using stabilized position
         vec2 gradient;
-        surfaceHit.normal = getNormal(surfaceHit.position.xz, ctx.time, gradient);
+        surfaceHit.normal = getNormal(stablePos.xz, ctx.time, gradient);
         surfaceHit.gradient = gradient;
+        
+        // Update position to stabilized version for consistent shading
+        surfaceHit.position = stablePos;
     }
     
     // Compose final color (uses ctx.rayDir for shading calculations)
