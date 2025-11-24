@@ -12,8 +12,6 @@
 //
 //   RenderPipeline.frag
 //     ├─ renderScene() - Orchestrates all rendering systems
-//     ├─ calculateRefraction() - Handles water refraction
-//     ├─ calculateReflection() - Handles water reflection
 //     └─ composeFinalColor() - Combines all contributions
 //
 //   Systems (called by RenderPipeline):

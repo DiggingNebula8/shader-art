@@ -68,70 +68,9 @@ struct RenderContext {
 // ============================================================================
 // INTEGRATION FUNCTIONS
 // ============================================================================
-
-// Calculate refraction through water to terrain floor
-// Uses VolumeRaymarching + TerrainSDF to find floor
-// Uses TerrainShading to shade the floor
-vec3 calculateRefraction(vec3 pos, vec3 normal, vec3 viewDir, RenderContext ctx) {
-    float eta = AIR_IOR / WATER_IOR;
-    vec3 refractedDir = refractRay(-viewDir, normal, eta);
-    
-    // Calculate water depth info
-    WaterDepthInfo depthInfo = calculateWaterDepthAndColor(pos, normal, viewDir, ctx.terrainParams);
-    
-    vec3 baseAbsorption = exp(-waterAbsorption * depthInfo.depth);
-    vec3 refractedColor = depthInfo.waterColor * baseAbsorption;
-    float translucencyFactor = 1.0 - smoothstep(3.0, 25.0, depthInfo.depth);
-    
-    if (dot(refractedDir, normal) < 0.0 && translucencyFactor > 0.01) {
-        VolumeHit hit = raymarchTerrain(pos, refractedDir, MAX_WATER_DEPTH, ctx.time, ctx.terrainParams);
-        
-        if (hit.hit && hit.valid) {
-            vec3 floorPos = hit.position;
-            vec3 floorNormal = hit.normal;
-            
-            // Shade floor using TerrainShading
-            TerrainShadingParams terrainParams;
-            terrainParams.pos = floorPos;
-            terrainParams.normal = floorNormal;
-            terrainParams.viewDir = -refractedDir;
-            terrainParams.time = ctx.time;
-            terrainParams.terrainParams = ctx.terrainParams;
-            terrainParams.light = evaluateLighting(ctx.sky, ctx.time);
-            terrainParams.sky = ctx.sky;
-            terrainParams.waterSurfacePos = pos;
-            terrainParams.waterNormal = normal;
-            
-            vec3 floorColor = shadeTerrain(terrainParams);
-            
-            // Apply water absorption
-            vec3 absorption = exp(-waterAbsorption * hit.distance);
-            refractedColor = floorColor * absorption;
-            
-            // Add water tint
-            vec3 waterTint = mix(shallowWaterColor, deepWaterColor, 1.0 - exp(-hit.distance * 0.04));
-            refractedColor = mix(refractedColor, waterTint, 0.25);
-        }
-    }
-    
-    // Blend with base water color based on translucency
-    if (translucencyFactor < 1.0) {
-        vec3 baseWaterRefracted = depthInfo.waterColor * baseAbsorption;
-        refractedColor = mix(baseWaterRefracted, refractedColor, translucencyFactor);
-    }
-    
-    return refractedColor;
-}
-
-// Calculate reflection from water surface
-// Uses VolumeRaymarching + WaveSDF for surface intersection
-// Uses WaterShading for reflection calculation
-// Note: This helper is currently unused; shadeWater() handles reflection internally
-vec3 calculateReflection(vec3 pos, vec3 normal, vec3 viewDir, vec2 gradient, RenderContext ctx) {
-    // Use WaterShading's reflection calculation
-    // Pass -1.0 for roughness to compute it internally
-    return calculateReflectedColor(pos, normal, viewDir, ctx.time, gradient, ctx.sky, -1.0);
-}
+// Note: Refraction and reflection are handled by WaterShading system
+// (see calculateRefractedColor() and calculateReflectedColor() in WaterShading.frag)
+// RenderPipeline orchestrates the systems but delegates refraction/reflection to WaterShading
 
 // Compose final color from all contributions
 // Combines water shading, refraction, reflection, and lighting
