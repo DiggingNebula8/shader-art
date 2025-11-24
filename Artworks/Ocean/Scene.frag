@@ -78,7 +78,6 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     // Generate camera ray using proper FOV calculation
     // UV coordinates in [0, 1] range
     vec2 uv = fragCoord / iResolution.xy;
-    vec3 rd = generateCameraRay(cam, uv, iResolution.xy);
     
     // Create sky and terrain configuration
     SkyAtmosphere sky = createSkyPreset_Foggy();
@@ -87,7 +86,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     // Create render context
     RenderContext ctx;
     ctx.cameraPos = cam.position;
-    ctx.rayDir = rd;
+    ctx.rayDir = generateCameraRay(cam, uv, iResolution.xy);
     ctx.time = iTime;
     ctx.sky = sky;
     ctx.terrainParams = terrainParams;
@@ -95,15 +94,15 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     
     // Render scene using RenderPipeline
     // Returns both color and hit data (avoids duplicate raymarching)
-    RenderResult renderResult = renderScene(cam.position, rd, iTime, ctx);
+    RenderResult renderResult = renderScene(iTime, ctx);
     vec3 color = renderResult.color;
     
     // Use hit data from renderScene() instead of re-raymarching
     float distance = renderResult.hit ? renderResult.distance : MAX_DIST;
-    vec3 hitPos = renderResult.hit ? renderResult.hitPosition : (cam.position + rd * MAX_DIST);
+    vec3 hitPos = renderResult.hit ? renderResult.hitPosition : (ctx.cameraPos + ctx.rayDir * MAX_DIST);
     
     // Apply atmospheric fog/haze using the SkyAtmosphere system
-    color = applyAtmosphericFog(color, hitPos, cam.position, rd, sky, iTime);
+    color = applyAtmosphericFog(color, hitPos, ctx.cameraPos, ctx.rayDir, sky, iTime);
     
     // Apply camera exposure (physically-based)
     // This multiplies the color by the exposure value
