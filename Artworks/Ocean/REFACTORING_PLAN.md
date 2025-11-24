@@ -117,13 +117,13 @@ Scene.frag (or RenderPipeline.frag)
 - [x] Create `TerrainShadingParams` struct for clear interface
 
 ### Phase 4: Create Render Pipeline
-- [ ] Create `RenderPipeline.frag`
-- [ ] Move integration logic from Scene.frag:
-  - [ ] `calculateRefraction()` - uses VolumeRaymarching + TerrainSDF
-  - [ ] `calculateReflection()` - uses VolumeRaymarching + WaveSDF
-  - [ ] `composeFinalColor()` - combines all contributions
-- [ ] Define clear system interfaces
-- [ ] Implement high-level rendering functions
+- [x] Create `RenderPipeline.frag`
+- [x] Move integration logic from Scene.frag:
+  - [x] `calculateRefraction()` - uses VolumeRaymarching + TerrainSDF
+  - [x] `calculateReflection()` - uses VolumeRaymarching + WaveSDF
+  - [x] `composeFinalColor()` - combines all contributions
+- [x] Define clear system interfaces
+- [x] Implement high-level rendering functions
 
 ### Phase 5: Refactor Scene.frag
 - [ ] Make Scene.frag thin wrapper
