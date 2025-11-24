@@ -36,13 +36,17 @@
 // RENDER CONTEXT STRUCTURES
 // ============================================================================
 
+// Surface type constants
+const int SURFACE_WATER = 0;
+const int SURFACE_TERRAIN = 1;
+
 struct SurfaceHit {
     bool hit;
     vec3 position;
     vec3 normal;
     vec2 gradient;
     float distance;
-    int surfaceType;  // 0 = water, 1 = terrain, etc.
+    int surfaceType;  // SURFACE_WATER, SURFACE_TERRAIN, etc.
 };
 
 struct RenderResult {
@@ -135,7 +139,7 @@ vec3 composeFinalColor(SurfaceHit hit, RenderContext ctx) {
         return skyColor(ctx.rayDir, ctx.sky, ctx.time);
     }
     
-    if (hit.surfaceType == 0) {
+    if (hit.surfaceType == SURFACE_WATER) {
         // Water surface
         vec3 viewDir = -ctx.rayDir;
         
@@ -154,7 +158,7 @@ vec3 composeFinalColor(SurfaceHit hit, RenderContext ctx) {
         WaterShadingResult waterResult = shadeWater(waterParams);
         
         return waterResult.color;
-    } else if (hit.surfaceType == 1) {
+    } else if (hit.surfaceType == SURFACE_TERRAIN) {
         // Terrain surface (not currently used, but available for future)
         vec3 viewDir = -ctx.rayDir;
         
@@ -194,7 +198,7 @@ RenderResult renderScene(vec3 ro, vec3 rd, float time, RenderContext ctx) {
     surfaceHit.position = waterHit.position;
     surfaceHit.normal = waterHit.normal;
     surfaceHit.distance = waterHit.distance;
-    surfaceHit.surfaceType = 0;  // Water surface
+    surfaceHit.surfaceType = SURFACE_WATER;  // Water surface
     
     // Calculate gradient for water shading
     if (surfaceHit.hit) {
