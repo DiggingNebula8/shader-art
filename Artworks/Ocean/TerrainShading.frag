@@ -141,23 +141,5 @@ vec3 shadeTerrain(TerrainShadingParams params) {
     return ambient + diffuse + specular + caustics;
 }
 
-// Backward compatibility wrapper - matches old shadeOceanFloor signature
-vec3 shadeOceanFloor(vec3 floorPos, vec3 viewDir, vec3 normal, float time, TerrainParams floorParams, SkyAtmosphere sky, vec3 waterSurfacePos, vec3 waterNormal) {
-    LightingInfo light = evaluateLighting(sky, time);
-    
-    TerrainShadingParams params;
-    params.pos = floorPos;
-    params.normal = normal;
-    params.viewDir = viewDir;
-    params.time = time;
-    params.terrainParams = floorParams;
-    params.light = light;
-    params.sky = sky;
-    params.waterSurfacePos = waterSurfacePos;
-    params.waterNormal = waterNormal;
-    
-    return shadeTerrain(params);
-}
-
 #endif // TERRAIN_SHADING_FRAG
 

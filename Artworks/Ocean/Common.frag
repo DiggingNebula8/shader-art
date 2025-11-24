@@ -63,21 +63,9 @@ const float baseRoughness = 0.03;
 const float maxRoughness = 0.12;
 const vec3 WATER_F0 = vec3(0.018, 0.019, 0.020);
 
-// log2 implementation (fallback for older GLSL versions)
-float log2_impl(float x) {
-    return log(x) / log(2.0);
-}
-
 // Simple hash function for pseudo-random noise
 float hash(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
-}
-
-// Hash function for 2D random values (for bubble distribution)
-float hash2(vec2 p) {
-    p = fract(p * 0.3183099 + 0.1);
-    p *= 17.0;
-    return fract(p.x * p.y * (p.x + p.y));
 }
 
 // Hash function for 3D random values (for star field)
