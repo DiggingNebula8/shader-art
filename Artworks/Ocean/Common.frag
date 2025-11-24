@@ -83,9 +83,11 @@ float smoothNoise(vec2 p) {
 
 // Fractal noise (fBm - fractional Brownian motion)
 // Uses fixed loop bound for portability and better compiler optimization
-// Note: octaves parameter is effectively clamped to MAX_FBM_OCTAVES (8).
-// Values above 8 are truncated - only the first 8 octaves will be computed.
+// Note: octaves parameter is clamped to MAX_FBM_OCTAVES (8) at function entry.
+// Values above 8 are explicitly clamped - only the first 8 octaves will be computed.
 float fractalNoise(vec2 p, float scale, int octaves, float persistence, float lacunarity) {
+    const int MAX_FBM_OCTAVES = 8;
+    octaves = min(octaves, MAX_FBM_OCTAVES);
     if (octaves <= 0) {
         return 0.0;
     }
@@ -94,7 +96,6 @@ float fractalNoise(vec2 p, float scale, int octaves, float persistence, float la
     float frequency = scale;
     float maxValue = 0.0;
     
-    const int MAX_FBM_OCTAVES = 8;
     for (int i = 0; i < MAX_FBM_OCTAVES; i++) {
         if (i >= octaves) break;
         value += smoothNoise(p * frequency) * amplitude;
