@@ -137,6 +137,37 @@ TerrainMaterial createRockyTerrainMaterial() {
 }
 
 // ============================================================================
+// OBJECT MATERIAL
+// ============================================================================
+// Material type for objects/subjects in the scene
+// Used by: ObjectSystem shading
+// ============================================================================
+
+struct ObjectMaterial {
+    vec3 baseColor;          // Base object color
+    float roughness;         // Surface roughness (0.0 = smooth, 1.0 = rough)
+    float metallic;          // Metallic factor (0.0 = dielectric, 1.0 = metal)
+    float specularIntensity; // Specular highlight intensity
+};
+
+// Create default object material (red buoy)
+ObjectMaterial createDefaultObjectMaterial() {
+    ObjectMaterial mat;
+    mat.baseColor = vec3(0.8, 0.2, 0.2);  // Red color for buoy
+    mat.roughness = 0.3;                   // Moderately smooth
+    mat.metallic = 0.0;                    // Non-metallic
+    mat.specularIntensity = 0.5;           // Moderate specular
+    return mat;
+}
+
+// Create white object material
+ObjectMaterial createWhiteObjectMaterial() {
+    ObjectMaterial mat = createDefaultObjectMaterial();
+    mat.baseColor = vec3(0.9, 0.9, 0.9);  // White color
+    return mat;
+}
+
+// ============================================================================
 // FUTURE MATERIAL TYPES
 // ============================================================================
 // Additional material types can be added here:

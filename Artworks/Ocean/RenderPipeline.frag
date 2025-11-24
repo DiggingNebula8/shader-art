@@ -11,6 +11,7 @@
 // Systems Coordinated:
 //   - WaveSystem (wave geometry)
 //   - TerrainSystem (terrain geometry)
+//   - ObjectSystem (object geometry)
 //   - WaterShading (water material properties)
 //   - TerrainShading (terrain material properties)
 //   - SkySystem (atmosphere and lighting)
@@ -30,8 +31,10 @@
 #include "VolumeRaymarching.frag"
 #include "WaveSystem.frag"
 #include "TerrainSystem.frag"
+#include "ObjectSystem.frag"
 #include "WaterShading.frag"
 #include "TerrainShading.frag"
+#include "ObjectShading.frag"
 
 // ============================================================================
 // RENDER CONTEXT STRUCTURES
@@ -40,6 +43,7 @@
 // Surface type constants
 const int SURFACE_WATER = 0;
 const int SURFACE_TERRAIN = 1;
+const int SURFACE_OBJECT = 2;
 
 struct SurfaceHit {
     bool hit;
@@ -66,6 +70,7 @@ struct RenderContext {
     Camera camera;
     WaterMaterial waterMaterial;  // Water material properties (art-directable)
     TerrainMaterial terrainMaterial;  // Terrain material properties (art-directable)
+    ObjectMaterial objectMaterial;  // Object material properties (art-directable)
 };
 
 // ============================================================================
@@ -83,10 +88,12 @@ vec3 composeFinalColor(SurfaceHit hit, RenderContext ctx) {
         return skyColor(ctx.rayDir, ctx.sky, ctx.time);
     }
     
+    // Evaluate lighting once (used by all shading systems)
+    LightingInfo light = evaluateLighting(ctx.sky, ctx.time);
+    vec3 viewDir = -ctx.rayDir;
+    
     if (hit.surfaceType == SURFACE_WATER) {
         // Water surface
-        vec3 viewDir = -ctx.rayDir;
-        
         // Prepare WaterShading parameters
         WaterShadingParams waterParams;
         waterParams.pos = hit.position;
@@ -94,7 +101,7 @@ vec3 composeFinalColor(SurfaceHit hit, RenderContext ctx) {
         waterParams.viewDir = viewDir;
         waterParams.gradient = hit.gradient;
         waterParams.time = ctx.time;
-        waterParams.light = evaluateLighting(ctx.sky, ctx.time);
+        waterParams.light = light;
         waterParams.sky = ctx.sky;
         waterParams.floorParams = ctx.terrainParams;
         waterParams.material = ctx.waterMaterial;
@@ -104,22 +111,48 @@ vec3 composeFinalColor(SurfaceHit hit, RenderContext ctx) {
         
         return waterResult.color;
     } else if (hit.surfaceType == SURFACE_TERRAIN) {
-        // Terrain surface (not currently used, but available for future)
-        vec3 viewDir = -ctx.rayDir;
-        
+        // Terrain surface (above-water terrain)
         TerrainShadingParams terrainParams;
         terrainParams.pos = hit.position;
         terrainParams.normal = hit.normal;
         terrainParams.viewDir = viewDir;
         terrainParams.time = ctx.time;
         terrainParams.terrainParams = ctx.terrainParams;
-        terrainParams.light = evaluateLighting(ctx.sky, ctx.time);
+        terrainParams.light = light;
         terrainParams.sky = ctx.sky;
-        terrainParams.waterSurfacePos = hit.position;  // No water above
-        terrainParams.waterNormal = vec3(0.0, 1.0, 0.0);
-        terrainParams.material = ctx.terrainMaterial;  // Use terrain material from context
+        
+        // Check if there's water above this terrain position
+        float waterHeight = getWaveHeight(hit.position.xz, ctx.time);
+        if (hit.position.y < waterHeight) {
+            // Terrain is below water (shouldn't happen for above-water terrain, but handle gracefully)
+            vec2 gradient;
+            vec3 waterNormal = getNormal(hit.position.xz, ctx.time, gradient);
+            vec3 waterSurfacePos = vec3(hit.position.x, waterHeight, hit.position.z);
+            terrainParams.waterSurfacePos = waterSurfacePos;
+            terrainParams.waterNormal = waterNormal;
+        } else {
+            // Above-water terrain - no water above
+            terrainParams.waterSurfacePos = hit.position;
+            terrainParams.waterNormal = vec3(0.0, 1.0, 0.0);
+        }
+        
+        terrainParams.material = ctx.terrainMaterial;
         
         return shadeTerrain(terrainParams);
+    } else if (hit.surfaceType == SURFACE_OBJECT) {
+        // Object surface
+        // Prepare ObjectShading parameters
+        ObjectShadingParams objectParams;
+        objectParams.pos = hit.position;
+        objectParams.normal = hit.normal;
+        objectParams.viewDir = viewDir;
+        objectParams.time = ctx.time;
+        objectParams.light = light;
+        objectParams.sky = ctx.sky;
+        objectParams.material = ctx.objectMaterial;
+        
+        // Shade object using ObjectShading system
+        return shadeObject(objectParams);
     }
     
     return vec3(0.0);
@@ -137,19 +170,51 @@ vec3 composeFinalColor(SurfaceHit hit, RenderContext ctx) {
 // Returns both color and hit data to avoid duplicate raymarching
 // Uses ctx.cameraPos, ctx.rayDir, and ctx.time for all ray operations
 RenderResult renderScene(RenderContext ctx) {
-    // Raymarch to water surface using WaveSystem
+    // Raymarch all surfaces
+    VolumeHit objectHit = raymarchBuoy(ctx.cameraPos, ctx.rayDir, MAX_DIST, ctx.time);
     VolumeHit waterHit = raymarchWaveSurface(ctx.cameraPos, ctx.rayDir, MAX_DIST, ctx.time);
+    VolumeHit terrainHit = raymarchTerrain(ctx.cameraPos, ctx.rayDir, MAX_DIST, ctx.time, ctx.terrainParams);
     
     SurfaceHit surfaceHit;
-    surfaceHit.hit = waterHit.hit && waterHit.valid;
-    surfaceHit.position = waterHit.position;
-    surfaceHit.distance = waterHit.distance;
-    surfaceHit.surfaceType = SURFACE_WATER;  // Water surface
     
-    // Calculate normal and gradient for water shading
-    // Note: raymarchWaveSurface does NOT compute normal/gradient to avoid redundant computation
-    // We compute them here once after position stabilization
-    if (surfaceHit.hit) {
+    // Determine which surface was hit first (closest)
+    // Check all hits and find the closest valid one
+    float closestDist = MAX_DIST;
+    int closestType = -1;
+    
+    if (objectHit.hit && objectHit.valid && objectHit.distance < closestDist) {
+        closestDist = objectHit.distance;
+        closestType = SURFACE_OBJECT;
+    }
+    if (waterHit.hit && waterHit.valid && waterHit.distance < closestDist) {
+        closestDist = waterHit.distance;
+        closestType = SURFACE_WATER;
+    }
+    if (terrainHit.hit && terrainHit.valid && terrainHit.distance < closestDist) {
+        // Only consider terrain if it's above water level (above-water terrain)
+        float terrainWaterHeight = getWaveHeight(terrainHit.position.xz, ctx.time);
+        if (terrainHit.position.y > terrainWaterHeight) {
+            closestDist = terrainHit.distance;
+            closestType = SURFACE_TERRAIN;
+        }
+    }
+    
+    // Set up surface hit based on closest surface
+    if (closestType == SURFACE_OBJECT) {
+        // Object hit
+        surfaceHit.hit = true;
+        surfaceHit.position = objectHit.position;
+        surfaceHit.distance = objectHit.distance;
+        surfaceHit.normal = objectHit.normal;
+        surfaceHit.surfaceType = SURFACE_OBJECT;
+        surfaceHit.gradient = vec2(0.0);
+    } else if (closestType == SURFACE_WATER) {
+        // Water surface hit
+        surfaceHit.hit = true;
+        surfaceHit.position = waterHit.position;
+        surfaceHit.distance = waterHit.distance;
+        surfaceHit.surfaceType = SURFACE_WATER;
+        
         // Stabilize position to reduce jittering
         // Use a small snap grid for XZ to ensure consistent sampling
         // Recalculate Y from the snapped XZ to maintain accuracy
@@ -166,10 +231,22 @@ RenderResult renderScene(RenderContext ctx) {
         
         // Update position to stabilized version for consistent shading
         surfaceHit.position = stablePos;
+    } else if (closestType == SURFACE_TERRAIN) {
+        // Above-water terrain hit
+        surfaceHit.hit = true;
+        surfaceHit.position = terrainHit.position;
+        surfaceHit.distance = terrainHit.distance;
+        surfaceHit.normal = terrainHit.normal;
+        surfaceHit.surfaceType = SURFACE_TERRAIN;
+        surfaceHit.gradient = vec2(0.0);
     } else {
-        // No hit - set defaults
+        // No hit
+        surfaceHit.hit = false;
+        surfaceHit.position = ctx.cameraPos + ctx.rayDir * MAX_DIST;
+        surfaceHit.distance = MAX_DIST;
         surfaceHit.normal = vec3(0.0);
         surfaceHit.gradient = vec2(0.0);
+        surfaceHit.surfaceType = SURFACE_WATER; // Default, won't be used
     }
     
     // Compose final color (uses ctx.rayDir for shading calculations)

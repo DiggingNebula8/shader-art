@@ -80,7 +80,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     
     // Create sky and terrain configuration
     SkyAtmosphere sky = createSkyPreset_Foggy();
-    TerrainParams terrainParams = createDefaultOceanFloor();
+    TerrainParams terrainParams = createHillyTerrain();
     
     // Create water material (art-directable - can be tweaked without recompilation)
     WaterMaterial waterMaterial = createDefaultWaterMaterial();
@@ -95,6 +95,11 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     // terrainMaterial = createSandyTerrainMaterial();
     // terrainMaterial = createRockyTerrainMaterial();
     
+    // Create object material (art-directable - can be tweaked without recompilation)
+    ObjectMaterial objectMaterial = createDefaultObjectMaterial();
+    // Example: Uncomment to use different object presets
+    // objectMaterial = createWhiteObjectMaterial();
+    
     // Create render context
     RenderContext ctx;
     ctx.cameraPos = cam.position;
@@ -105,6 +110,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     ctx.camera = cam;
     ctx.waterMaterial = waterMaterial;
     ctx.terrainMaterial = terrainMaterial;
+    ctx.objectMaterial = objectMaterial;
     
     // Render scene using RenderPipeline
     // Returns both color and hit data (avoids duplicate raymarching)

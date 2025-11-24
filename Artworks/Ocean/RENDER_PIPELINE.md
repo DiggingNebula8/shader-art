@@ -8,7 +8,7 @@ The Render Pipeline orchestrates all rendering systems to produce the final scen
 
 - **Orchestration**: Coordinates all rendering systems
 - **Raymarching**: Finds surface intersections using VolumeRaymarching
-- **Shading**: Delegates to WaterShading and TerrainShading systems
+- **Shading**: Delegates to WaterShading, TerrainShading, and ObjectShading systems
 - **Composition**: Combines all contributions into final color
 
 ## Dependencies
@@ -17,8 +17,10 @@ The Render Pipeline includes and coordinates:
 - **MaterialSystem**: Material properties and factory functions
 - **WaveSystem**: Wave geometry and raymarching
 - **TerrainSystem**: Terrain geometry and raymarching
+- **ObjectSystem**: Object geometry and raymarching
 - **WaterShading**: Water material properties and PBR shading
 - **TerrainShading**: Terrain material properties and caustics
+- **ObjectShading**: Object material properties and PBR shading
 - **SkySystem**: Atmosphere and lighting
 - **VolumeRaymarching**: Unified raymarching algorithm
 - **CameraSystem**: Camera parameters (for future use)
@@ -38,6 +40,7 @@ struct RenderContext {
     Camera camera;         // Camera parameters
     WaterMaterial waterMaterial;  // Water material properties (art-directable)
     TerrainMaterial terrainMaterial;  // Terrain material properties (art-directable)
+    ObjectMaterial objectMaterial;  // Object material properties (art-directable)
 };
 ```
 
@@ -72,6 +75,7 @@ struct SurfaceHit {
 ```glsl
 const int SURFACE_WATER = 0;
 const int SURFACE_TERRAIN = 1;
+const int SURFACE_OBJECT = 2;
 ```
 
 ## Main Function
