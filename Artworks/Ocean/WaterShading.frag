@@ -10,7 +10,8 @@
 //   - WaveSystem: For wave height/gradient queries (getWaveHeight, getWaveGradient)
 //   - TerrainSystem: For terrain height queries (getTerrainHeight)
 //   - VolumeRaymarching: For terrain raymarching (raymarchTerrain)
-//   - OceanDistanceField: For distance field queries used in water translucency
+//   - DistanceFieldSystem: For distance field queries used in water translucency
+//     (functions provided by DistanceFieldSystem.frag: getDistanceToSurface, getDistanceFieldInfo, etc.)
 // ============================================================================
 
 #ifndef WATER_SHADING_FRAG
@@ -22,7 +23,11 @@
 #include "VolumeRaymarching.frag"
 #include "WaveSystem.frag"
 #include "TerrainSystem.frag"
-#include "OceanDistanceField.frag"
+#include "DistanceFieldSystem.frag"
+
+// Note: Distance field functions (getDistanceToSurface, getDistanceFieldInfo, getDepthAlongDirection)
+// are implemented in DistanceFieldSystem.frag and available when this file is included.
+// DistanceFieldSystem.frag defines getSceneSDF() and getSceneNormal() for the Ocean scene.
 
 // ============================================================================
 // WATER PROPERTIES

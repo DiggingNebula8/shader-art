@@ -1,26 +1,28 @@
 // ============================================================================
 // DISTANCE FIELD SYSTEM
 // ============================================================================
-// Generic distance field system for scene geometry
-// Provides distance queries that work with any SDF function
+// Distance field system for Ocean scene geometry
+// Provides unified scene SDF queries combining terrain and objects
 // ============================================================================
-// Usage:
-//   1. Define your scene SDF function: float getSceneSDF(vec3 pos, float time)
-//   2. Use the distance field macros/functions provided below
-//   3. Optionally define getSceneNormal(vec3 pos, float time) for normal queries
+// This file contains:
+//   - Generic distance field algorithms and macros
+//   - Ocean scene-specific SDF definitions (getSceneSDF, getSceneNormal)
+//   - Distance field query functions (getDistanceToSurface, getDistanceFieldInfo, etc.)
 //
-// Example:
+// Usage:
 //   #include "DistanceFieldSystem.frag"
-//   float getSceneSDF(vec3 pos, float time) {
-//       return length(pos) - 1.0; // Sphere SDF
-//   }
-//   float dist = getDistanceToSurface(start, dir, maxDist, time);
+//   float dist = getDistanceToSurface(start, dir, maxDist, terrainParams, time);
+//   DistanceFieldInfo info = getDistanceFieldInfo(pos, terrainParams, time);
 // ============================================================================
 
 #ifndef DISTANCE_FIELD_SYSTEM_FRAG
 #define DISTANCE_FIELD_SYSTEM_FRAG
 
 #include "Common.frag"
+
+// Include Ocean scene systems needed for scene SDF definition
+#include "TerrainSystem.frag"
+#include "ObjectSystem.frag"
 
 // ============================================================================
 // DISTANCE FIELD INFO STRUCTURE
@@ -88,17 +90,10 @@ struct DistanceFieldInfo {
     } while(false)
 
 // ============================================================================
-// FUNCTION-BASED API IMPLEMENTATIONS
-// ============================================================================
-// These functions are implemented in scene-specific wrappers
-// The generic file only provides the structure and helper functions
-// Scene wrappers should implement these using getSceneSDF
-// ============================================================================
-
-// ============================================================================
 // MULTI-SDF COMBINATION HELPERS
 // ============================================================================
 // These helpers allow combining multiple SDFs into a unified scene SDF
+// Must be defined before getSceneSDF() uses them
 // ============================================================================
 
 // Smooth minimum - combines two SDFs with smooth blending
@@ -126,6 +121,76 @@ float intersectionSDF(float d1, float d2) {
 // Subtraction - subtracts d1 from d2
 float subtractionSDF(float d1, float d2) {
     return max(-d1, d2);
+}
+
+// ============================================================================
+// OCEAN SCENE DISTANCE FIELD DEFINITIONS
+// ============================================================================
+// Unified scene SDF - combines terrain and objects into a single distance field
+// This is the core scene definition used by all distance field queries
+// These functions are Ocean-scene-specific and use TerrainParams
+// ============================================================================
+
+// Unified scene SDF - combines terrain and objects into a single distance field
+float getSceneSDF(vec3 pos, float time, TerrainParams terrainParams) {
+    // Get terrain distance
+    float terrainDist = getTerrainSDF(pos, terrainParams);
+    
+    // Get object distance
+    float objectDist = getBuoySDF(pos, time);
+    
+    // Use smooth minimum for better blending between surfaces
+    const float smoothK = 2.0;
+    return smoothMinSDF(terrainDist, objectDist, smoothK);
+}
+
+// Scene normal function for more accurate surface queries
+vec3 getSceneNormal(vec3 pos, float time, TerrainParams terrainParams) {
+    float terrainDist = getTerrainSDF(pos, terrainParams);
+    float objectDist = getBuoySDF(pos, time);
+    
+    // Return normal of closest surface
+    if (abs(terrainDist) < abs(objectDist)) {
+        return getTerrainNormal(pos, terrainParams);
+    } else {
+        return getBuoyNormal(pos, time);
+    }
+}
+
+// ============================================================================
+// FUNCTION-BASED API IMPLEMENTATIONS
+// ============================================================================
+// These functions provide a complete API for distance field queries
+// They use getSceneSDF and getSceneNormal defined above
+// ============================================================================
+
+// Get distance to nearest surface along a ray
+// Uses the unified scene SDF
+float getDistanceToSurface(vec3 start, vec3 dir, float maxDist, TerrainParams terrainParams, float time) {
+    #define getSDF(pos, t) getSceneSDF(pos, t, terrainParams)
+    float dist;
+    DISTANCE_FIELD_RAYMARCH(start, dir, maxDist, time, dist);
+    #undef getSDF
+    return dist;
+}
+
+// Get distance field information at a point
+DistanceFieldInfo getDistanceFieldInfo(vec3 pos, TerrainParams terrainParams, float time) {
+    DistanceFieldInfo info;
+    
+    float dist = getSceneSDF(pos, time, terrainParams);
+    info.distance = dist;
+    
+    // Use getSceneNormal for accurate surface position
+    vec3 normal = getSceneNormal(pos, time, terrainParams);
+    info.surfacePos = pos - normal * dist;
+    
+    return info;
+}
+
+// Get depth along a direction
+float getDepthAlongDirection(vec3 start, vec3 dir, float maxDepth, TerrainParams terrainParams, float time) {
+    return getDistanceToSurface(start, dir, maxDepth, terrainParams, time);
 }
 
 #endif // DISTANCE_FIELD_SYSTEM_FRAG

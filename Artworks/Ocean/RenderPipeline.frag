@@ -12,11 +12,11 @@
 //   - WaveSystem (wave geometry)
 //   - TerrainSystem (terrain geometry)
 //   - ObjectSystem (object geometry)
-//   - WaterShading (water material properties, includes translucency via DistanceFieldSystem)
+//   - DistanceFieldSystem (unified scene SDF queries - provides distance field API)
+//   - WaterShading (water material properties, uses distance field for translucency)
 //   - TerrainShading (terrain material properties)
 //   - SkySystem (atmosphere and lighting)
 //   - VolumeRaymarching (unified raymarching algorithm)
-//   - DistanceFieldSystem (distance field queries for translucency and other effects)
 //
 // Main Function:
 //   - renderScene() - Called by Scene.frag to render the entire scene
@@ -33,6 +33,14 @@
 #include "WaveSystem.frag"
 #include "TerrainSystem.frag"
 #include "ObjectSystem.frag"
+#include "DistanceFieldSystem.frag"
+
+// Note: DistanceFieldSystem.frag contains all distance field functionality:
+//   - Scene SDF definitions (getSceneSDF, getSceneNormal) for Ocean scene
+//   - Distance field query functions (getDistanceToSurface, getDistanceFieldInfo, etc.)
+// RenderPipeline includes DistanceFieldSystem and uses its functions.
+
+// Now include shading systems (they can use the distance field functions from DistanceFieldSystem)
 #include "WaterShading.frag"
 #include "TerrainShading.frag"
 #include "ObjectShading.frag"
