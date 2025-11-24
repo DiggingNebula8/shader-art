@@ -200,11 +200,12 @@ RenderResult renderScene(float time, RenderContext ctx) {
     SurfaceHit surfaceHit;
     surfaceHit.hit = waterHit.hit && waterHit.valid;
     surfaceHit.position = waterHit.position;
-    surfaceHit.normal = waterHit.normal;
     surfaceHit.distance = waterHit.distance;
     surfaceHit.surfaceType = SURFACE_WATER;  // Water surface
     
-    // Calculate gradient for water shading
+    // Calculate normal and gradient for water shading
+    // Note: raymarchWaveSurface does NOT compute normal/gradient to avoid redundant computation
+    // We compute them here once after position stabilization
     if (surfaceHit.hit) {
         // Stabilize position to reduce jittering
         // Use a small snap grid for XZ to ensure consistent sampling
@@ -214,13 +215,18 @@ RenderResult renderScene(float time, RenderContext ctx) {
         float stableY = getWaveHeight(snappedXZ, ctx.time);
         vec3 stablePos = vec3(snappedXZ.x, stableY, snappedXZ.y);
         
-        // Calculate normal using stabilized position
+        // Compute normal and gradient from stabilized position (single computation)
+        // This is the only place we compute getNormal, avoiding redundant computation
         vec2 gradient;
         surfaceHit.normal = getNormal(stablePos.xz, ctx.time, gradient);
         surfaceHit.gradient = gradient;
         
         // Update position to stabilized version for consistent shading
         surfaceHit.position = stablePos;
+    } else {
+        // No hit - set defaults
+        surfaceHit.normal = vec3(0.0);
+        surfaceHit.gradient = vec2(0.0);
     }
     
     // Compose final color (uses ctx.rayDir for shading calculations)

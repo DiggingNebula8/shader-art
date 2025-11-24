@@ -72,7 +72,7 @@ const float waveFreqs[NUM_WAVES] = float[](
 
 // Wave speeds computed from dispersion: w = sqrt(g*k) for deep water
 // Time scaling factor to slow down wave motion for more realistic appearance
-const float TIME_SCALE = 0.8; // Slower, more contemplative motion
+const float TIME_SCALE = 1.0; 
 
 // Compute wave speed from wave number using dispersion relation
 // w = sqrt(g*k) for deep water waves, scaled by TIME_SCALE
@@ -220,11 +220,11 @@ VolumeHit raymarchWaveSurface(vec3 start, vec3 dir, float maxDist, float time) {
     VolumeHit hit;
     RAYMARCH_SURFACE_CORE(start, dir, maxDist, time, hit);
     
-    // Calculate normal using system-specific function
-    if (hit.hit && hit.valid) {
-        vec2 gradient;
-        hit.normal = getNormal(hit.position.xz, time, gradient);
-    }
+    // Note: Normal and gradient are NOT computed here to avoid redundant computation
+    // RenderPipeline.renderScene() will recompute them after position stabilization
+    // This avoids computing getNormal twice (once here, once after stabilization)
+    // The gradient field is initialized to vec2(0.0) by RAYMARCH_SURFACE_CORE
+    // and normal is set to a placeholder vec3(0.0, 1.0, 0.0) or vec3(0.0)
     
     #undef getSDF
     return hit;

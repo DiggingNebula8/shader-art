@@ -23,6 +23,7 @@ struct VolumeHit {
     float distance;     // Distance traveled
     vec3 position;      // Hit position
     vec3 normal;        // Surface normal (if surface hit)
+    vec2 gradient;      // Surface gradient (for wave systems, etc.) - computed alongside normal
     bool valid;         // Is the result valid? (prevents NaN/Inf issues)
 };
 
@@ -62,6 +63,7 @@ struct VolumeHit {
                 hit.position = pos; \
                 hit.valid = true; \
                 hit.normal = vec3(0.0, 1.0, 0.0); \
+                hit.gradient = vec2(0.0); \
                 break; \
             } \
             if (t > maxDist) { \
@@ -70,6 +72,7 @@ struct VolumeHit {
                 hit.position = start + dir * maxDist; \
                 hit.valid = true; \
                 hit.normal = vec3(0.0); \
+                hit.gradient = vec2(0.0); \
                 break; \
             } \
             float stepSize = clamp(h * 0.4, MIN_DIST * 0.5, 1.0); \
@@ -85,6 +88,7 @@ struct VolumeHit {
             hit.position = start + dir * maxDist; \
             hit.valid = true; \
             hit.normal = vec3(0.0); \
+            hit.gradient = vec2(0.0); \
         } \
     } while(false)
 
@@ -107,6 +111,7 @@ struct VolumeHit {
                 hit.position = pos; \
                 hit.valid = true; \
                 hit.normal = vec3(0.0, 1.0, 0.0); \
+                hit.gradient = vec2(0.0); \
                 break; \
             } \
             if (t > maxDist || h > 50.0) { \
@@ -121,6 +126,7 @@ struct VolumeHit {
             hit.position = start + dir * maxDist; \
             hit.valid = true; \
             hit.normal = vec3(0.0); \
+            hit.gradient = vec2(0.0); \
         } \
     } while(false)
 
