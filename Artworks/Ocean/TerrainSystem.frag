@@ -327,7 +327,7 @@ float getTerrainHeight(vec2 pos, TerrainParams params) {
 
 // Get terrain normal (for shading and lighting)
 vec3 getTerrainNormal(vec3 pos, TerrainParams params) {
-    const float epsilon = 1.0;
+    const float epsilon = 0.1;
     
     float hL = getTerrainHeight(pos.xz - vec2(epsilon, 0.0), params);
     float hR = getTerrainHeight(pos.xz + vec2(epsilon, 0.0), params);

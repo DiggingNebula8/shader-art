@@ -485,7 +485,7 @@ vec3 shadeOceanFloor(vec3 floorPos, vec3 viewDir, vec3 normal, float time, Terra
     const float floorRoughness = 0.8;
     
     float floorHeight = getTerrainHeight(floorPos.xz, floorParams);
-    float depthVariation = (floorHeight - floorParams.baseHeight) / floorParams.heightVariation;
+    float depthVariation = (floorHeight - floorParams.baseHeight) / max(floorParams.heightVariation, 0.001);
     vec3 floorColor = mix(floorColorBase * 0.7, floorColorBase * 1.3, depthVariation * 0.5 + 0.5);
     
     float textureNoise = smoothNoise(floorPos.xz * 0.5) * 0.1;
