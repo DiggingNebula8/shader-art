@@ -352,4 +352,41 @@ vec3 getTerrainNormal(vec3 pos, TerrainParams params) {
     return normal;
 }
 
+// ============================================================================
+// SDF FUNCTION FOR VOLUME RAYMARCHING
+// ============================================================================
+
+// Signed Distance Function for terrain surface
+// Returns positive if above surface, negative if below
+// Used by VolumeRaymarching system for raymarching
+float getTerrainSDF(vec3 pos, TerrainParams params) {
+    return pos.y - getTerrainHeight(pos.xz, params);
+}
+
+// ============================================================================
+// RAYMARCHING WRAPPER
+// ============================================================================
+
+// Include VolumeRaymarching for VolumeHit struct and core algorithms
+#include "VolumeRaymarching.frag"
+
+// System-specific raymarch wrapper for terrain surface
+// Uses VolumeRaymarching core algorithm with getTerrainSDF
+VolumeHit raymarchTerrain(vec3 start, vec3 dir, float maxDist, float time, TerrainParams params) {
+    // Define SDF function macro that captures params
+    #define getSDF(pos, t) getTerrainSDF(pos, params)
+    
+    // Use raymarching algorithm macro
+    VolumeHit hit;
+    RAYMARCH_VOLUME_CORE(start, dir, maxDist, time, hit);
+    
+    // Calculate normal using system-specific function
+    if (hit.hit && hit.valid) {
+        hit.normal = getTerrainNormal(hit.position, params);
+    }
+    
+    #undef getSDF
+    return hit;
+}
+
 #endif // TERRAIN_SYSTEM_FRAG

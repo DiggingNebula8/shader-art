@@ -1,14 +1,31 @@
 // ============================================================================
-// OCEAN SCENE - Main Rendering Entry Point
+// OCEAN SCENE - SHADER ENTRY POINT
 // ============================================================================
-// Combines Camera, Sky, and Ocean systems to render a complete ocean scene
+// This is the ACTUAL entry point for the shader (contains mainImage())
+// 
+// Architecture:
+//   Scene.frag (THIS FILE)
+//     ├─ mainImage() - Shader entry point (called by Shadertoy/GLSL runtime)
+//     ├─ Camera setup and configuration
+//     ├─ Calls RenderPipeline.renderScene() - Core rendering logic
+//     └─ Post-processing (fog, exposure, DOF, tone mapping, gamma)
+//
+//   RenderPipeline.frag
+//     ├─ renderScene() - Orchestrates all rendering systems
+//     └─ composeFinalColor() - Combines all contributions
+//
+//   Systems (called by RenderPipeline):
+//     ├─ WaveSystem - Wave geometry
+//     ├─ TerrainSystem - Terrain geometry
+//     ├─ WaterShading - Water material properties
+//     ├─ TerrainShading - Terrain material properties
+//     └─ SkySystem - Atmosphere and lighting
 // ============================================================================
 
-// Include all systems
 #include "Common.frag"
+#include "MaterialSystem.frag"
 #include "CameraSystem.frag"
-#include "SkySystem.frag"
-#include "OceanSystem.frag"
+#include "RenderPipeline.frag"
 
 // ============================================================================
 // TONE MAPPING
@@ -60,55 +77,46 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     // Generate camera ray using proper FOV calculation
     // UV coordinates in [0, 1] range
     vec2 uv = fragCoord / iResolution.xy;
-    vec3 rd = generateCameraRay(cam, uv, iResolution.xy);
     
-    // Raymarch ocean surface
-    vec3 pos = raymarchOcean(cam.position, rd, iTime);
-    
-    // Calculate distance for depth of field
-    float distance = length(pos - cam.position);
-    
-    // Create sky once and reuse throughout
+    // Create sky and terrain configuration
     SkyAtmosphere sky = createSkyPreset_Foggy();
+    TerrainParams terrainParams = createDefaultOceanFloor();
     
-    // Background - render sky if we didn't hit the ocean
-    if (distance > MAX_DIST * 0.95) {
-        vec3 bgColor = skyColor(rd, sky, iTime);
-        
-        // Apply fog to background sky for consistency
-        // Use a far point along the ray for fog calculation
-        vec3 farPos = cam.position + rd * MAX_DIST;
-        bgColor = applyAtmosphericFog(bgColor, farPos, cam.position, rd, sky, iTime);
-        
-        // Camera exposure + optional DOF + tone mapping + gamma, same as ocean path
-        bgColor = applyExposure(bgColor, cam);
-        bgColor = applyDepthOfField(bgColor, distance, cam);
-        bgColor = toneMapReinhardJodie(bgColor);
-        bgColor = pow(bgColor, vec3(1.0 / 2.2));
-        
-        fragColor = vec4(bgColor, 1.0);
-        return;
-    }
+    // Create water material (art-directable - can be tweaked without recompilation)
+    WaterMaterial waterMaterial = createDefaultWaterMaterial();
+    // Example: Uncomment to use different water presets
+    // waterMaterial = createClearTropicalWater();
+    // waterMaterial = createMurkyWater();
+    // waterMaterial = createChoppyWater();
     
-    // Stabilize position to reduce jittering
-    // Use a small snap grid for XZ to ensure consistent sampling
-    // Recalculate Y from the snapped XZ to maintain accuracy
-    const float positionSnap = 0.0005;
-    vec2 snappedXZ = floor(pos.xz / positionSnap + 0.5) * positionSnap;
-    float stableY = getWaveHeight(snappedXZ, iTime);
-    vec3 stablePos = vec3(snappedXZ.x, stableY, snappedXZ.y);
+    // Create terrain material (art-directable - can be tweaked without recompilation)
+    TerrainMaterial terrainMaterial = createDefaultTerrainMaterial();
+    // Example: Uncomment to use different terrain presets
+    // terrainMaterial = createSandyTerrainMaterial();
+    // terrainMaterial = createRockyTerrainMaterial();
     
-    // Compute normal (gradient computed here and passed through to avoid redundant computation)
-    vec2 gradient;
-    vec3 normal = getNormal(stablePos.xz, iTime, gradient);
-    vec3 viewDir = -rd;
+    // Create render context
+    RenderContext ctx;
+    ctx.cameraPos = cam.position;
+    ctx.rayDir = generateCameraRay(cam, uv, iResolution.xy);
+    ctx.time = iTime;
+    ctx.sky = sky;
+    ctx.terrainParams = terrainParams;
+    ctx.camera = cam;
+    ctx.waterMaterial = waterMaterial;
+    ctx.terrainMaterial = terrainMaterial;
     
-    // Shade ocean with sky configuration - use stable position for consistent results
-    vec3 color = shadeOcean(stablePos, normal, viewDir, iTime, gradient, sky);
+    // Render scene using RenderPipeline
+    // Returns both color and hit data (avoids duplicate raymarching)
+    RenderResult renderResult = renderScene(ctx);
+    vec3 color = renderResult.color;
+    
+    // Use hit data from renderScene() instead of re-raymarching
+    float distance = renderResult.hit ? renderResult.distance : MAX_DIST;
+    vec3 hitPos = renderResult.hit ? renderResult.hitPosition : (ctx.cameraPos + ctx.rayDir * MAX_DIST);
     
     // Apply atmospheric fog/haze using the SkyAtmosphere system
-    // Use stablePos for fog calculation to match shading position
-    color = applyAtmosphericFog(color, stablePos, cam.position, rd, sky, iTime);
+    color = applyAtmosphericFog(color, hitPos, ctx.cameraPos, ctx.rayDir, sky, ctx.time);
     
     // Apply camera exposure (physically-based)
     // This multiplies the color by the exposure value
