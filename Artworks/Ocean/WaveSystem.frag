@@ -71,14 +71,12 @@ const float waveFreqs[NUM_WAVES] = float[](
 );
 
 // Wave speeds computed from dispersion: w = sqrt(g*k) for deep water
-// Time scaling factor to slow down wave motion for more realistic appearance
-const float TIME_SCALE = 1.0; 
 
 // Compute wave speed from wave number using dispersion relation
-// w = sqrt(g*k) for deep water waves, scaled by TIME_SCALE
+// w = sqrt(g*k) for deep water waves
 // This ensures speeds are always computed from frequencies, preventing drift
 float getWaveSpeed(float k) {
-    return sqrt(GRAVITY * k) * TIME_SCALE;
+    return sqrt(GRAVITY * k);
 }
 
 // ============================================================================

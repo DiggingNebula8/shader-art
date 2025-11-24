@@ -41,7 +41,6 @@ The ocean uses a 10-component wave spectrum with realistic amplitude and frequen
 
 - **NUM_WAVES**: 10 waves total
 - **PRIMARY_SWELL_DIR**: Dominant wind direction `vec2(0.9578, 0.2873)`
-- **TIME_SCALE**: 0.3 (slows wave motion for more realistic appearance)
 
 ### Wave Spectrum
 
