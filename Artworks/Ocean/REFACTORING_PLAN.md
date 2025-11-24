@@ -107,14 +107,14 @@ Scene.frag (or RenderPipeline.frag)
 - [x] Update OceanSystem to use new wrappers (backward compatible)
 
 ### Phase 3: Extract Water Shading
-- [ ] Create `WaterShading.frag`
-- [ ] Move PBR/material functions from OceanSystem
-- [ ] Create `WaterShadingParams` struct for clear interface
-- [ ] Use VolumeRaymarching for refraction calculations
-- [ ] Remove direct Terrain dependencies (use params struct)
-- [ ] Create `TerrainShading.frag`
-- [ ] Move `shadeOceanFloor()` from OceanSystem to TerrainShading
-- [ ] Create `TerrainShadingParams` struct for clear interface
+- [x] Create `WaterShading.frag`
+- [x] Move PBR/material functions from OceanSystem
+- [x] Create `WaterShadingParams` struct for clear interface
+- [x] Use VolumeRaymarching for refraction calculations
+- [x] Remove direct Terrain dependencies (use params struct)
+- [x] Create `TerrainShading.frag`
+- [x] Move `shadeOceanFloor()` from OceanSystem to TerrainShading
+- [x] Create `TerrainShadingParams` struct for clear interface
 
 ### Phase 4: Create Render Pipeline
 - [ ] Create `RenderPipeline.frag`
