@@ -76,8 +76,8 @@ vec2 gradient;
 vec3 normal = getNormal(pos.xz, time, gradient);
 ```
 
-#### `getWaveSpeed(float k)`
-Calculates wave speed from wave number using dispersion relation: `w = sqrt(g*k)`
+#### `getAngularFrequency(float k)`
+Calculates angular frequency w from wave number k using dispersion relation: `w = sqrt(g*k)`
 
 ## Water Properties
 
@@ -373,7 +373,7 @@ vec3 color = shadeOcean(pos, normal, viewDir, time, gradient, sky);
 1. **Fixed Sample Count**: Reflection uses fixed 2 samples to avoid temporal flickering
 2. **Raymarching**: Refraction raymarching is only performed when translucency is significant
 3. **Caching**: Lighting evaluation is cached and reused
-4. **Precomputed Values**: Wave speeds are precomputed for efficiency
+4. **Precomputed Values**: Wave numbers are precomputed, angular frequencies computed on-the-fly for efficiency
 
 ## Technical Details
 
@@ -381,8 +381,8 @@ vec3 color = shadeOcean(pos, normal, viewDir, time, gradient, sky);
 
 Waves follow the deep water dispersion relation:
 - Speed: `v = sqrt(g * k) * TIME_SCALE`
-- Frequency: `w = sqrt(g * k)`
-- Where `g` is gravity (9.81 m/s²) and `k` is wave number
+- Angular frequency: `w = sqrt(g * k)` (rad/s)
+- Where `g` is gravity (9.81 m/s²), `k` is wave number (rad/m), and `w` is angular frequency (rad/s)
 
 ### Water Absorption
 
