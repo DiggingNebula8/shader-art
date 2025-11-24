@@ -94,7 +94,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     
     // Render scene using RenderPipeline
     // Returns both color and hit data (avoids duplicate raymarching)
-    RenderResult renderResult = renderScene(iTime, ctx);
+    RenderResult renderResult = renderScene(ctx);
     vec3 color = renderResult.color;
     
     // Use hit data from renderScene() instead of re-raymarching
@@ -102,7 +102,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec3 hitPos = renderResult.hit ? renderResult.hitPosition : (ctx.cameraPos + ctx.rayDir * MAX_DIST);
     
     // Apply atmospheric fog/haze using the SkyAtmosphere system
-    color = applyAtmosphericFog(color, hitPos, ctx.cameraPos, ctx.rayDir, sky, iTime);
+    color = applyAtmosphericFog(color, hitPos, ctx.cameraPos, ctx.rayDir, sky, ctx.time);
     
     // Apply camera exposure (physically-based)
     // This multiplies the color by the exposure value

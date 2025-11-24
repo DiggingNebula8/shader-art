@@ -191,10 +191,9 @@ vec3 composeFinalColor(SurfaceHit hit, RenderContext ctx) {
 // Main scene rendering function
 // Raymarches to find surface, then shades it
 // Returns both color and hit data to avoid duplicate raymarching
-// Uses ctx.cameraPos and ctx.rayDir for all ray operations
-RenderResult renderScene(float time, RenderContext ctx) {
+// Uses ctx.cameraPos, ctx.rayDir, and ctx.time for all ray operations
+RenderResult renderScene(RenderContext ctx) {
     // Raymarch to water surface using WaveSystem
-    // Use ctx.time consistently to avoid divergence if time parameter differs
     VolumeHit waterHit = raymarchWaveSurface(ctx.cameraPos, ctx.rayDir, MAX_DIST, ctx.time);
     
     SurfaceHit surfaceHit;
