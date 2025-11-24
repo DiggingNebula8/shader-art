@@ -132,10 +132,10 @@ Scene.frag (or RenderPipeline.frag)
 - [x] Keep OceanSystem as thin compatibility layer during transition
 
 ### Phase 6: Cleanup
-- [ ] Remove OceanSystem.frag (after full migration verified)
-- [ ] Update documentation
-- [ ] Verify all functionality works
-- [ ] Performance testing and optimization
+- [x] Remove OceanSystem.frag (after full migration verified)
+- [x] Update documentation
+- [x] Verify all functionality works
+- [ ] Performance testing and optimization (manual testing required)
 
 ## Benefits
 

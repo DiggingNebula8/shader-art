@@ -8,23 +8,29 @@ The Ocean System provides a comprehensive, physically-based ocean rendering solu
 - **PBR Water Shading**: Physically-based rendering with Fresnel, specular highlights, and subsurface scattering
 - **Refraction & Reflection**: Realistic light transport through water with raymarching
 - **Ocean Floor**: Procedural terrain with customizable depth and variation
-- **Modular Architecture**: Split into focused helper functions for maintainability
+- **Modular Architecture**: Split into focused systems (WaveSystem, WaterShading, TerrainShading, RenderPipeline) for maintainability and extensibility
 
 ## Basic Usage
 
 ```glsl
-#include "OceanSystem.frag"
+#include "RenderPipeline.frag"
 #include "SkySystem.frag"
 
-// Create sky for lighting
+// Create sky and terrain configuration
 SkyAtmosphere sky = createSkyPreset_ClearDay();
+TerrainParams terrainParams = createDefaultOceanFloor();
 
-// Calculate wave height and normal at a position
-vec2 gradient;
-vec3 normal = getNormal(pos.xz, time, gradient);
+// Create render context
+RenderContext ctx;
+ctx.cameraPos = camPos;
+ctx.rayDir = rayDir;
+ctx.time = time;
+ctx.sky = sky;
+ctx.terrainParams = terrainParams;
+ctx.camera = camera;
 
-// Shade the ocean surface
-vec3 color = shadeOcean(pos, normal, viewDir, time, gradient, sky);
+// Render scene using RenderPipeline
+vec3 color = renderScene(camPos, rayDir, time, ctx);
 ```
 
 ## Wave System
@@ -266,26 +272,35 @@ Distorts reflection direction based on wave roughness and position.
 ### Basic Ocean Rendering
 
 ```glsl
-#include "OceanSystem.frag"
-#include "SkySystem.frag"
+#include "Common.frag"
+#include "CameraSystem.frag"
+#include "RenderPipeline.frag"
 
 void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+    // Create and configure camera
+    Camera cam = createDefaultCamera();
+    cam.position = vec3(0.0, 2.5, 6.0);
+    cam.target = vec3(0.0, 0.5, 0.0);
+    
+    // Generate camera ray
     vec2 uv = fragCoord / iResolution.xy;
-    vec2 pos = (uv - 0.5) * 20.0; // World position
+    vec3 rd = generateCameraRay(cam, uv, iResolution.xy);
     
-    float time = iTime;
-    
-    // Calculate normal
-    vec2 gradient;
-    vec3 normal = getNormal(pos, time, gradient);
-    float height = getWaveHeight(pos, time);
-    
-    // Create sky
+    // Create sky and terrain configuration
     SkyAtmosphere sky = createSkyPreset_ClearDay();
+    TerrainParams terrainParams = createDefaultOceanFloor();
     
-    // Shade ocean
-    vec3 viewDir = normalize(vec3(0.0, 1.0, 1.0));
-    vec3 color = shadeOcean(vec3(pos.x, height, pos.y), normal, viewDir, time, gradient, sky);
+    // Create render context
+    RenderContext ctx;
+    ctx.cameraPos = cam.position;
+    ctx.rayDir = rd;
+    ctx.time = iTime;
+    ctx.sky = sky;
+    ctx.terrainParams = terrainParams;
+    ctx.camera = cam;
+    
+    // Render scene using RenderPipeline
+    vec3 color = renderScene(cam.position, rd, iTime, ctx);
     
     fragColor = vec4(color, 1.0);
 }
@@ -326,7 +341,7 @@ vec3 normal = getNormal(pos.xz, time, gradient);
 
 ```glsl
 // Modify water appearance by adjusting constants
-// (Note: These are compile-time constants, modify in OceanSystem.frag)
+// (Note: These are compile-time constants, modify in Common.frag)
 
 // For clearer water (less absorption):
 // const vec3 waterAbsorption = vec3(0.05, 0.02, 0.01);
