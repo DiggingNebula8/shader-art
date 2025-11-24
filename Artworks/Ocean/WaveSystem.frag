@@ -183,10 +183,10 @@ vec3 getNormal(vec2 pos, float time, out vec2 gradient) {
         // Pre-multiply micro detail with rotation vectors
         vec2 microX = rotX * 2.0; // 0.01 * 2.0 = 0.02
         vec2 microY = rotY * 2.0;
-        vec2 gradX = getWaveGradient(pos + microX, time);
-        vec2 gradY = getWaveGradient(pos + microY, time);
+        vec2 microGrad = (getWaveGradient(pos + microX, time) + 
+                          getWaveGradient(pos + microY, time)) * 0.5;
         
-        vec3 microNormal = normalize(vec3(-(gradX.x + grad.x) * 0.5, 1.0, -(gradY.y + grad.y) * 0.5));
+        vec3 microNormal = normalize(vec3(-microGrad.x, 1.0, -microGrad.y));
         normal = normalize(mix(normal, microNormal, crestFactor * 0.08)); // Very subtle
     }
     
