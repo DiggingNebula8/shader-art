@@ -59,7 +59,7 @@ struct TerrainParams {
     // Noise function parameters
     int octaves;           // Number of octaves for fractal noise
     float persistence;     // Amplitude falloff between octaves
-    float lacunarity;      // Frequency multiplier between octaves (reserved for future use)
+    float lacunarity;      // Frequency multiplier between octaves
 };
 
 // ============================================================================
@@ -68,7 +68,7 @@ struct TerrainParams {
 
 // Ridged multifractal noise - creates sharp ridges like mountain ranges
 // Based on Musgrave's ridged multifractal algorithm
-float ridgedNoise(vec2 p, float scale, int octaves, float persistence) {
+float ridgedNoise(vec2 p, float scale, int octaves, float persistence, float lacunarity) {
     int steps = clamp(octaves, 0, MAX_OCTAVES);
     
     float value = 0.0;
@@ -90,7 +90,7 @@ float ridgedNoise(vec2 p, float scale, int octaves, float persistence) {
         maxValue += amplitude;
         
         amplitude *= persistence;
-        frequency *= DEFAULT_LACUNARITY;
+        frequency *= lacunarity;
     }
     
     return value / max(maxValue, NOISE_NORMALIZATION_EPSILON);
@@ -122,7 +122,7 @@ vec2 domainWarp(vec2 p, float strength) {
 }
 
 // Billow noise - creates billowy, cloud-like patterns
-float billowNoise(vec2 p, float scale, int octaves, float persistence) {
+float billowNoise(vec2 p, float scale, int octaves, float persistence, float lacunarity) {
     int steps = clamp(octaves, 0, MAX_OCTAVES);
     
     float value = 0.0;
@@ -141,7 +141,7 @@ float billowNoise(vec2 p, float scale, int octaves, float persistence) {
         maxValue += amplitude;
         
         amplitude *= persistence;
-        frequency *= DEFAULT_LACUNARITY;
+        frequency *= lacunarity;
     }
     
     return value / max(maxValue, NOISE_NORMALIZATION_EPSILON);
@@ -170,7 +170,7 @@ TerrainParams initTerrainParams() {
     params.valleyness = 0.0;
     params.octaves = 4;
     params.persistence = 0.5;
-    params.lacunarity = DEFAULT_LACUNARITY; // Reserved for future use - currently DEFAULT_LACUNARITY is used directly
+    params.lacunarity = DEFAULT_LACUNARITY;
     return params;
 }
 
@@ -263,28 +263,28 @@ TerrainParams createPlainsTerrain() {
 // ============================================================================
 
 // Sample noise at a specific scale with optional offset
-float sampleScaleNoise(vec2 pos, float scale, int octaves, float persistence, vec2 offset) {
-    return fractalNoise(pos + offset, scale, octaves, persistence);
+float sampleScaleNoise(vec2 pos, float scale, int octaves, float persistence, float lacunarity, vec2 offset) {
+    return fractalNoise(pos + offset, scale, octaves, persistence, lacunarity);
 }
 
 // Apply ridged noise mixing if needed
-float applyRidgedNoise(vec2 pos, float baseNoise, float scale, int octaves, float persistence, float ridgedness, float mountainness) {
+float applyRidgedNoise(vec2 pos, float baseNoise, float scale, int octaves, float persistence, float lacunarity, float ridgedness, float mountainness) {
     if (ridgedness < MIN_AMPLITUDE_THRESHOLD || mountainness < MIN_AMPLITUDE_THRESHOLD) {
         return baseNoise;
     }
     
-    float ridged = ridgedNoise(pos, scale * 0.5, octaves, persistence);
+    float ridged = ridgedNoise(pos, scale * 0.5, octaves, persistence, lacunarity);
     return mix(baseNoise, ridged, ridgedness * mountainness);
 }
 
 // Apply valley noise mixing if needed
-float applyValleyNoise(vec2 pos, float baseNoise, float scale, float valleyness) {
+float applyValleyNoise(vec2 pos, float baseNoise, float scale, float lacunarity, float valleyness) {
     if (valleyness < MIN_AMPLITUDE_THRESHOLD) {
         return baseNoise;
     }
     
     const vec2 valleyOffset = vec2(200.0, 200.0);
-    float valleyNoise = 1.0 - abs(fractalNoise(pos + valleyOffset, scale * 0.7, 2, 0.6));
+    float valleyNoise = 1.0 - abs(fractalNoise(pos + valleyOffset, scale * 0.7, 2, 0.6, lacunarity));
     return mix(baseNoise, valleyNoise, valleyness);
 }
 
@@ -303,30 +303,30 @@ float getTerrainHeight(vec2 pos, TerrainParams params) {
     
     // Large-scale terrain
     if (params.largeAmplitude > MIN_AMPLITUDE_THRESHOLD) {
-        float largeNoise = sampleScaleNoise(warpedPos, params.largeScale, params.octaves, params.persistence, vec2(0.0));
-        largeNoise = applyRidgedNoise(warpedPos, largeNoise, params.largeScale, params.octaves, params.persistence, params.ridgedness, params.mountainness);
+        float largeNoise = sampleScaleNoise(warpedPos, params.largeScale, params.octaves, params.persistence, params.lacunarity, vec2(0.0));
+        largeNoise = applyRidgedNoise(warpedPos, largeNoise, params.largeScale, params.octaves, params.persistence, params.lacunarity, params.ridgedness, params.mountainness);
         heightVariation += (largeNoise - 0.5) * 2.0 * params.largeAmplitude;
     }
     
     // Medium-scale terrain
     if (params.mediumAmplitude > MIN_AMPLITUDE_THRESHOLD) {
         const vec2 mediumOffset = vec2(100.0, 100.0);
-        float mediumNoise = sampleScaleNoise(warpedPos, params.mediumScale, max(params.octaves - 1, 1), params.persistence, mediumOffset);
-        mediumNoise = applyValleyNoise(warpedPos + mediumOffset, mediumNoise, params.mediumScale, params.valleyness);
+        float mediumNoise = sampleScaleNoise(warpedPos, params.mediumScale, max(params.octaves - 1, 1), params.persistence, params.lacunarity, mediumOffset);
+        mediumNoise = applyValleyNoise(warpedPos + mediumOffset, mediumNoise, params.mediumScale, params.lacunarity, params.valleyness);
         heightVariation += (mediumNoise - 0.5) * 2.0 * params.mediumAmplitude;
     }
     
     // Small-scale terrain (detail)
     if (params.smallAmplitude > MIN_AMPLITUDE_THRESHOLD) {
         const vec2 smallOffset = vec2(200.0, 200.0);
-        float smallNoise = sampleScaleNoise(warpedPos, params.smallScale, max(params.octaves - 2, 1), params.persistence, smallOffset);
+        float smallNoise = sampleScaleNoise(warpedPos, params.smallScale, max(params.octaves - 2, 1), params.persistence, params.lacunarity, smallOffset);
         heightVariation += (smallNoise - 0.5) * 2.0 * params.smallAmplitude;
     }
     
     // Apply roughness detail
     if (params.roughness > MIN_AMPLITUDE_THRESHOLD) {
         const vec2 roughOffset = vec2(300.0, 300.0);
-        float roughNoise = billowNoise(warpedPos + roughOffset, params.smallScale * 1.5, 2, 0.7);
+        float roughNoise = billowNoise(warpedPos + roughOffset, params.smallScale * 1.5, 2, 0.7, params.lacunarity);
         heightVariation += (roughNoise - 0.5) * 2.0 * params.roughness * ROUGHNESS_MULTIPLIER;
     }
     

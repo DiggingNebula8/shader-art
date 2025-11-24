@@ -55,7 +55,7 @@ float smoothNoise(vec2 p) {
 }
 
 // Fractal noise (fBm - fractional Brownian motion)
-float fractalNoise(vec2 p, float scale, int octaves, float persistence) {
+float fractalNoise(vec2 p, float scale, int octaves, float persistence, float lacunarity) {
     if (octaves <= 0) {
         return 0.0;
     }
@@ -68,7 +68,7 @@ float fractalNoise(vec2 p, float scale, int octaves, float persistence) {
         value += smoothNoise(p * frequency) * amplitude;
         maxValue += amplitude;
         amplitude *= persistence;
-        frequency *= 2.0;
+        frequency *= lacunarity;
     }
     
     return value / max(maxValue, 1e-6); // Normalize to [0, 1]
