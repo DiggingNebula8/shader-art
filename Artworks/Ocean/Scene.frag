@@ -94,13 +94,13 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     ctx.camera = cam;
     
     // Render scene using RenderPipeline
-    vec3 color = renderScene(cam.position, rd, iTime, ctx);
+    // Returns both color and hit data (avoids duplicate raymarching)
+    RenderResult renderResult = renderScene(cam.position, rd, iTime, ctx);
+    vec3 color = renderResult.color;
     
-    // Calculate distance for depth of field and fog
-    // Raymarch to get hit position (needed for fog calculation)
-    VolumeHit waterHit = raymarchWaveSurface(cam.position, rd, MAX_DIST, iTime);
-    float distance = waterHit.hit && waterHit.valid ? waterHit.distance : MAX_DIST;
-    vec3 hitPos = waterHit.hit && waterHit.valid ? waterHit.position : (cam.position + rd * MAX_DIST);
+    // Use hit data from renderScene() instead of re-raymarching
+    float distance = renderResult.hit ? renderResult.distance : MAX_DIST;
+    vec3 hitPos = renderResult.hit ? renderResult.hitPosition : (cam.position + rd * MAX_DIST);
     
     // Apply atmospheric fog/haze using the SkyAtmosphere system
     color = applyAtmosphericFog(color, hitPos, cam.position, rd, sky, iTime);

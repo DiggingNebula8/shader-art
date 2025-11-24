@@ -40,6 +40,8 @@ struct VolumeHit {
 // Output: VolumeHit hit (must be declared before macro)
 #define RAYMARCH_SURFACE_CORE(start, dir, maxDist, time, hit) \
     do { \
+        hit.hit = false; \
+        hit.valid = false; \
         float t = 0.0; \
         float prevH = 1e10; \
         for (int i = 0; i < MAX_STEPS; i++) { \

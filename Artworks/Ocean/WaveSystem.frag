@@ -72,7 +72,7 @@ float waveFreqs[NUM_WAVES] = float[](
 
 // Wave speeds computed from dispersion: w = sqrt(g*k) for deep water
 // Time scaling factor to slow down wave motion for more realistic appearance
-const float TIME_SCALE = 0.3; // Slower, more contemplative motion
+const float TIME_SCALE = 0.8; // Slower, more contemplative motion
 
 // Precomputed wave speeds for efficiency (calculated once, used many times)
 const float waveSpeeds[NUM_WAVES] = float[](

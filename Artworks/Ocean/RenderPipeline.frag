@@ -45,6 +45,13 @@ struct SurfaceHit {
     int surfaceType;  // 0 = water, 1 = terrain, etc.
 };
 
+struct RenderResult {
+    vec3 color;        // Final rendered color
+    bool hit;          // Whether a surface was hit
+    vec3 hitPosition;  // Hit position (for fog calculation)
+    float distance;    // Ray distance (for DOF and fog)
+};
+
 struct RenderContext {
     vec3 cameraPos;
     vec3 rayDir;
@@ -177,7 +184,8 @@ vec3 composeFinalColor(SurfaceHit hit, RenderContext ctx) {
 
 // Main scene rendering function
 // Raymarches to find surface, then shades it
-vec3 renderScene(vec3 ro, vec3 rd, float time, RenderContext ctx) {
+// Returns both color and hit data to avoid duplicate raymarching
+RenderResult renderScene(vec3 ro, vec3 rd, float time, RenderContext ctx) {
     // Raymarch to water surface using WaveSystem
     VolumeHit waterHit = raymarchWaveSurface(ro, rd, MAX_DIST, time);
     
@@ -196,7 +204,16 @@ vec3 renderScene(vec3 ro, vec3 rd, float time, RenderContext ctx) {
     }
     
     // Compose final color
-    return composeFinalColor(surfaceHit, ctx);
+    vec3 color = composeFinalColor(surfaceHit, ctx);
+    
+    // Return both color and hit data
+    RenderResult result;
+    result.color = color;
+    result.hit = surfaceHit.hit;
+    result.hitPosition = surfaceHit.position;
+    result.distance = surfaceHit.distance;
+    
+    return result;
 }
 
 #endif // RENDER_PIPELINE_FRAG
