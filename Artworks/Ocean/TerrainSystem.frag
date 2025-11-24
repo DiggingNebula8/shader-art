@@ -25,6 +25,7 @@ const float EROSION_MULTIPLIER = 0.5;
 const float EROSION_REDUCTION = 0.7;
 const float DEFAULT_LACUNARITY = 2.0;
 const float NOISE_NORMALIZATION_EPSILON = 1e-6;
+const int MAX_OCTAVES = 8;
 
 // ============================================================================
 // TERRAIN PARAMETERS
@@ -57,8 +58,8 @@ struct TerrainParams {
     
     // Noise function parameters
     int octaves;           // Number of octaves for fractal noise
-    float persistence;     // Persistence (lacunarity) for fractal noise
-    float lacunarity;      // Frequency multiplier between octaves
+    float persistence;     // Amplitude falloff between octaves
+    float lacunarity;      // Frequency multiplier between octaves (reserved for future use)
 };
 
 // ============================================================================
@@ -68,12 +69,16 @@ struct TerrainParams {
 // Ridged multifractal noise - creates sharp ridges like mountain ranges
 // Based on Musgrave's ridged multifractal algorithm
 float ridgedNoise(vec2 p, float scale, int octaves, float persistence) {
+    int steps = clamp(octaves, 0, MAX_OCTAVES);
+    
     float value = 0.0;
     float amplitude = 1.0;
     float frequency = scale;
     float maxValue = 0.0;
     
-    for (int i = 0; i < octaves; i++) {
+    for (int i = 0; i < MAX_OCTAVES; i++) {
+        if (i >= steps) break;
+        
         float n = smoothNoise(p * frequency);
         // Create ridges by taking absolute value and inverting
         n = abs(n);
@@ -118,12 +123,16 @@ vec2 domainWarp(vec2 p, float strength) {
 
 // Billow noise - creates billowy, cloud-like patterns
 float billowNoise(vec2 p, float scale, int octaves, float persistence) {
+    int steps = clamp(octaves, 0, MAX_OCTAVES);
+    
     float value = 0.0;
     float amplitude = 1.0;
     float frequency = scale;
     float maxValue = 0.0;
     
-    for (int i = 0; i < octaves; i++) {
+    for (int i = 0; i < MAX_OCTAVES; i++) {
+        if (i >= steps) break;
+        
         float n = smoothNoise(p * frequency);
         // Make it billowy by taking absolute value
         n = abs(n * 2.0 - 1.0);
@@ -161,7 +170,7 @@ TerrainParams initTerrainParams() {
     params.valleyness = 0.0;
     params.octaves = 4;
     params.persistence = 0.5;
-    params.lacunarity = DEFAULT_LACUNARITY;
+    params.lacunarity = DEFAULT_LACUNARITY; // Reserved for future use - currently DEFAULT_LACUNARITY is used directly
     return params;
 }
 
