@@ -30,6 +30,9 @@ The Ocean System provides a comprehensive, physically-based ocean rendering solu
 SkyAtmosphere sky = createSkyPreset_ClearDay();
 TerrainParams terrainParams = createDefaultOceanFloor();
 
+// Create water material (art-directable)
+WaterMaterial waterMaterial = createDefaultWaterMaterial();
+
 // Create render context
 RenderContext ctx;
 ctx.cameraPos = camPos;
@@ -38,6 +41,7 @@ ctx.time = time;
 ctx.sky = sky;
 ctx.terrainParams = terrainParams;
 ctx.camera = camera;
+ctx.waterMaterial = waterMaterial;
 
 // Render scene using RenderPipeline
 RenderResult result = renderScene(ctx);
@@ -96,22 +100,30 @@ Calculates angular frequency w from wave number k using dispersion relation: `w 
 
 - **WATER_IOR**: 1.33 (index of refraction for water)
 - **AIR_IOR**: 1.0 (index of refraction for air)
-- **waterAbsorption**: `vec3(0.15, 0.045, 0.015)` m^-1 (realistic absorption coefficients)
+- **WATER_F0**: `vec3(0.018, 0.019, 0.020)` - Fresnel F0 (physical constant based on IOR)
 
-### Roughness
+### Water Material
 
+Water material properties are art-directable through the `WaterMaterial` struct, allowing tweaking without shader recompilation. See `WATER_SHADING.md` for complete documentation.
+
+**Default Values:**
+- **absorption**: `vec3(0.15, 0.045, 0.015)` m^-1 (realistic absorption coefficients)
 - **baseRoughness**: 0.03 (very smooth, calm water)
 - **maxRoughness**: 0.12 (choppy water)
+- **shallowWaterColor**: `vec3(0.0, 0.5, 0.75)` - Bright turquoise for shallow water
+- **deepWaterColor**: `vec3(0.0, 0.2, 0.4)` - Darker blue for deep water
+
+**Presets Available:**
+- `createDefaultWaterMaterial()` - Realistic ocean water
+- `createClearTropicalWater()` - Clear tropical water
+- `createMurkyWater()` - Murky/muddy water
+- `createChoppyWater()` - Rough/choppy water
 
 Roughness is calculated dynamically based on wave gradients and height:
 ```glsl
-float dynamicRoughness = calculateWaterRoughness(gradient, waveHeight);
+WaterMaterial material = createDefaultWaterMaterial();
+float dynamicRoughness = calculateWaterRoughness(gradient, waveHeight, material);
 ```
-
-### Water Colors
-
-- **shallowWaterColor**: `vec3(0.0, 0.5, 0.75)` - Bright turquoise for shallow water
-- **deepWaterColor**: `vec3(0.0, 0.2, 0.4)` - Darker blue for deep water
 
 Water color blends based on depth using exponential falloff.
 
@@ -300,6 +312,9 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     SkyAtmosphere sky = createSkyPreset_ClearDay();
     TerrainParams terrainParams = createDefaultOceanFloor();
     
+    // Create water material (art-directable)
+    WaterMaterial waterMaterial = createDefaultWaterMaterial();
+    
     // Create render context
     RenderContext ctx;
     ctx.cameraPos = cam.position;
@@ -308,6 +323,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     ctx.sky = sky;
     ctx.terrainParams = terrainParams;
     ctx.camera = cam;
+    ctx.waterMaterial = waterMaterial;
     
     // Render scene using RenderPipeline
     RenderResult result = renderScene(ctx);
@@ -351,18 +367,21 @@ vec3 normal = getNormal(pos.xz, time, gradient);
 ### Custom Water Properties
 
 ```glsl
-// Modify water appearance by adjusting constants
-// (Note: These are compile-time constants, modify in Common.frag)
+// Modify water appearance using WaterMaterial (art-directable, no recompilation needed)
 
-// For clearer water (less absorption):
-// const vec3 waterAbsorption = vec3(0.05, 0.02, 0.01);
+// Option 1: Use a preset
+WaterMaterial waterMaterial = createClearTropicalWater();
+// Or: createMurkyWater(), createChoppyWater()
 
-// For rougher water:
-// const float maxRoughness = 0.2;
+// Option 2: Customize default material
+WaterMaterial waterMaterial = createDefaultWaterMaterial();
+waterMaterial.absorption = vec3(0.05, 0.02, 0.01);  // Clearer water
+waterMaterial.shallowWaterColor = vec3(0.0, 0.6, 0.8);  // More cyan
+waterMaterial.deepWaterColor = vec3(0.0, 0.15, 0.3);   // Darker blue
+waterMaterial.maxRoughness = 0.2;  // Rougher water
 
-// For different water colors:
-// const vec3 shallowWaterColor = vec3(0.0, 0.6, 0.8); // More cyan
-// const vec3 deepWaterColor = vec3(0.0, 0.15, 0.3);   // Darker blue
+// Use in RenderContext
+ctx.waterMaterial = waterMaterial;
 ```
 
 ### Integration with Sky System
@@ -399,8 +418,9 @@ Waves follow the deep water dispersion relation:
 ### Water Absorption
 
 Light absorption follows Beer's law:
-- `absorption = exp(-waterAbsorption * pathLength)`
+- `absorption = exp(-material.absorption * pathLength)`
 - Red light is absorbed most, blue least (realistic for water)
+- Absorption coefficients are art-directable via `WaterMaterial` struct
 
 ### Roughness Calculation
 

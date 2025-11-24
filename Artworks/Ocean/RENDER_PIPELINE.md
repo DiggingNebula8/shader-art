@@ -35,6 +35,7 @@ struct RenderContext {
     SkyAtmosphere sky;     // Sky configuration
     TerrainParams terrainParams;  // Terrain configuration
     Camera camera;         // Camera parameters
+    WaterMaterial waterMaterial;  // Water material properties (art-directable)
 };
 ```
 
@@ -94,6 +95,10 @@ Main scene rendering function. Called by `Scene.frag` to render the complete sce
 #include "SkySystem.frag"
 #include "CameraSystem.frag"
 
+// Create water material (art-directable)
+WaterMaterial waterMaterial = createDefaultWaterMaterial();
+// Or use presets: createClearTropicalWater(), createMurkyWater(), createChoppyWater()
+
 // Create render context
 RenderContext ctx;
 ctx.cameraPos = cam.position;
@@ -102,6 +107,7 @@ ctx.time = iTime;
 ctx.sky = createSkyPreset_ClearDay();
 ctx.terrainParams = createDefaultOceanFloor();
 ctx.camera = cam;
+ctx.waterMaterial = waterMaterial;
 
 // Render scene
 RenderResult result = renderScene(ctx);
@@ -218,6 +224,7 @@ The Render Pipeline coordinates systems in this order:
 
 SkyAtmosphere sky = createSkyPreset_ClearDay();
 TerrainParams terrain = createDefaultOceanFloor();
+WaterMaterial waterMaterial = createDefaultWaterMaterial();
 
 RenderContext ctx;
 ctx.cameraPos = vec3(0.0, 5.0, 10.0);
@@ -226,6 +233,7 @@ ctx.time = iTime;
 ctx.sky = sky;
 ctx.terrainParams = terrain;
 ctx.camera = createDefaultCamera();
+ctx.waterMaterial = waterMaterial;
 
 RenderResult result = renderScene(ctx);
 vec3 color = result.color;

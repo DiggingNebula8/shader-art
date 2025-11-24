@@ -11,6 +11,7 @@
 #define TERRAIN_SHADING_FRAG
 
 #include "Common.frag"
+#include "MaterialSystem.frag"
 #include "SkySystem.frag"
 #include "TerrainSystem.frag"
 #include "WaveSystem.frag"
@@ -29,6 +30,7 @@ struct TerrainShadingParams {
     SkyAtmosphere sky;           // Sky configuration
     vec3 waterSurfacePos;        // Water surface position (for caustics)
     vec3 waterNormal;            // Water surface normal (for caustics)
+    TerrainMaterial material;    // Terrain material properties (art-directable)
 };
 
 // ============================================================================
@@ -112,25 +114,25 @@ vec3 shadeTerrain(TerrainShadingParams params) {
     vec3 sunColor = params.light.sunColor;
     float sunIntensity = params.light.sunIntensity;
     
-    const vec3 floorColorBase = vec3(0.3, 0.25, 0.2);
-    const float floorRoughness = 0.8;
-    
     float floorHeight = getTerrainHeight(params.pos.xz, params.terrainParams);
     float depthVariation = (floorHeight - params.terrainParams.baseHeight) / max(params.terrainParams.heightVariation, 0.001);
-    vec3 floorColor = mix(floorColorBase * 0.7, floorColorBase * 1.3, depthVariation * 0.5 + 0.5);
+    vec3 floorColor = mix(params.material.baseColor * 0.7, params.material.baseColor * 1.3, depthVariation * 0.5 + 0.5);
+    
+    // Blend with deep color based on depth
+    floorColor = mix(params.material.deepColor, floorColor, depthVariation * 0.5 + 0.5);
     
     float textureNoise = smoothNoise(params.pos.xz * 0.5) * 0.1;
     floorColor += textureNoise;
     
     float NdotL = max(dot(params.normal, sunDir), 0.0);
     
-    vec3 ambient = floorColor * 0.1;
+    vec3 ambient = floorColor * params.material.ambientFactor;
     vec3 diffuse = floorColor * sunColor * sunIntensity * NdotL;
     
     vec3 halfVec = normalize(params.viewDir + sunDir);
     float NdotH = max(dot(params.normal, halfVec), 0.0);
-    float specularPower = pow(NdotH, 32.0) * (1.0 - floorRoughness);
-    vec3 specular = sunColor * sunIntensity * specularPower * 0.2;
+    float specularPower = pow(NdotH, params.material.specularPower) * (1.0 - params.material.roughness);
+    vec3 specular = sunColor * sunIntensity * specularPower * params.material.specularIntensity;
     
     vec3 caustics = vec3(0.0);
     if (sunDir.y > 0.0 && params.waterSurfacePos.y > params.pos.y) {

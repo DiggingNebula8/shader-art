@@ -37,6 +37,7 @@ struct WaterShadingParams {
     LightingInfo light;          // Lighting information (from SkySystem)
     SkyAtmosphere sky;           // Sky configuration (for reflections)
     TerrainParams floorParams;   // Terrain params (for depth calculation)
+    WaterMaterial material;      // Water material properties (art-directable)
 };
 ```
 
@@ -190,7 +191,7 @@ Multi-scattering compensation for energy conservation.
 
 ## Subsurface Scattering
 
-### `vec3 getSubsurfaceScattering(vec3 normal, vec3 viewDir, vec3 lightDir, float depth)`
+### `vec3 getSubsurfaceScattering(vec3 normal, vec3 viewDir, vec3 lightDir, float depth, WaterMaterial material)`
 Calculates subsurface light transport through water.
 
 **Parameters:**
@@ -198,6 +199,7 @@ Calculates subsurface light transport through water.
 - `viewDir`: View direction
 - `lightDir`: Light direction
 - `depth`: Water depth in meters
+- `material`: Water material properties
 
 **Returns:** Subsurface scattering contribution `vec3`
 
@@ -210,14 +212,15 @@ Calculates subsurface light transport through water.
 
 ## Water Properties
 
-### `float calculateWaterRoughness(vec2 gradient, float waveHeight)`
+### `float calculateWaterRoughness(vec2 gradient, float waveHeight, WaterMaterial material)`
 Calculates dynamic roughness from wave state.
 
 **Parameters:**
 - `gradient`: Wave gradient (from `getWaveGradient()`)
 - `waveHeight`: Wave height at position
+- `material`: Water material properties
 
-**Returns:** Roughness value (clamped between `baseRoughness` and `maxRoughness`)
+**Returns:** Roughness value (clamped between `material.baseRoughness` and `material.maxRoughness`)
 
 **Features:**
 - Base roughness for calm water: 0.03
@@ -247,7 +250,7 @@ Distorts reflection direction based on wave roughness and position.
 
 ## Depth and Color Calculation
 
-### `WaterDepthInfo calculateWaterDepthAndColor(vec3 pos, vec3 normal, vec3 viewDir, TerrainParams floorParams)`
+### `WaterDepthInfo calculateWaterDepthAndColor(vec3 pos, vec3 normal, vec3 viewDir, TerrainParams floorParams, WaterMaterial material)`
 Calculates water depth and base color based on floor height and view angle.
 
 **Parameters:**
@@ -255,6 +258,7 @@ Calculates water depth and base color based on floor height and view angle.
 - `normal`: Surface normal
 - `viewDir`: View direction
 - `floorParams`: Terrain parameters
+- `material`: Water material properties
 
 **Returns:** `WaterDepthInfo` struct
 
@@ -267,7 +271,7 @@ Calculates water depth and base color based on floor height and view angle.
 
 ## Refraction and Reflection
 
-### `vec3 calculateRefractedColor(vec3 pos, vec3 normal, vec3 viewDir, WaterDepthInfo depthInfo, float time, TerrainParams floorParams, SkyAtmosphere sky)`
+### `vec3 calculateRefractedColor(vec3 pos, vec3 normal, vec3 viewDir, WaterDepthInfo depthInfo, float time, TerrainParams floorParams, SkyAtmosphere sky, WaterMaterial material)`
 Handles refraction through water with raymarching to the ocean floor.
 
 **Parameters:**
@@ -278,6 +282,7 @@ Handles refraction through water with raymarching to the ocean floor.
 - `time`: Animation time
 - `floorParams`: Terrain parameters
 - `sky`: Sky configuration
+- `material`: Water material properties
 
 **Returns:** Refracted color `vec3` (floor color with absorption)
 
@@ -289,7 +294,7 @@ Handles refraction through water with raymarching to the ocean floor.
 
 ---
 
-### `vec3 calculateReflectedColor(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient, SkyAtmosphere sky, float dynamicRoughness)`
+### `vec3 calculateReflectedColor(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient, SkyAtmosphere sky, float dynamicRoughness, WaterMaterial material)`
 Handles reflection with roughness-based multi-sample blurring.
 
 **Parameters:**
@@ -300,6 +305,7 @@ Handles reflection with roughness-based multi-sample blurring.
 - `gradient`: Wave gradient
 - `sky`: Sky configuration
 - `dynamicRoughness`: Surface roughness (if < 0, computed from gradient)
+- `material`: Water material properties
 
 **Returns:** Reflected sky color `vec3`
 
@@ -315,7 +321,7 @@ Handles reflection with roughness-based multi-sample blurring.
 
 ## Lighting Calculation
 
-### `WaterLightingResult calculateWaterLighting(vec3 pos, vec3 normal, vec3 viewDir, vec3 refractedColor, vec3 reflectedColor, WaterDepthInfo depthInfo, float time, vec2 gradient, SkyAtmosphere sky, LightingInfo light, float dynamicRoughness)`
+### `WaterLightingResult calculateWaterLighting(vec3 pos, vec3 normal, vec3 viewDir, vec3 refractedColor, vec3 reflectedColor, WaterDepthInfo depthInfo, float time, vec2 gradient, SkyAtmosphere sky, LightingInfo light, float dynamicRoughness, WaterMaterial material)`
 Applies complete PBR lighting to water.
 
 **Parameters:**
@@ -330,6 +336,7 @@ Applies complete PBR lighting to water.
 - `sky`: Sky configuration
 - `light`: Lighting information
 - `dynamicRoughness`: Surface roughness
+- `material`: Water material properties
 
 **Returns:** `WaterLightingResult` struct
 
@@ -342,16 +349,56 @@ Applies complete PBR lighting to water.
 
 ---
 
-## Water Material Constants
+## Water Material
 
-Defined in `Common.frag`:
+Water material properties are art-directable through the `WaterMaterial` struct, allowing tweaking without shader recompilation.
 
-- **`waterAbsorption`**: `vec3(0.15, 0.045, 0.015)` m⁻¹ - Absorption coefficients (RGB)
-- **`shallowWaterColor`**: `vec3(0.0, 0.5, 0.75)` - Bright turquoise for shallow water
+### `WaterMaterial` Structure
+
+```glsl
+struct WaterMaterial {
+    vec3 absorption;          // Water absorption coefficients (m^-1) - RGB channels
+    vec3 deepWaterColor;     // Color for deep water (darker blue)
+    vec3 shallowWaterColor;  // Color for shallow water (bright turquoise)
+    float baseRoughness;     // Base roughness for calm water (very smooth)
+    float maxRoughness;      // Maximum roughness for choppy water
+};
+```
+
+### Preset Functions
+
+#### `WaterMaterial createDefaultWaterMaterial()`
+Creates realistic ocean water material with default values:
+- **`absorption`**: `vec3(0.15, 0.045, 0.015)` m⁻¹ - Realistic absorption (red absorbed most)
 - **`deepWaterColor`**: `vec3(0.0, 0.2, 0.4)` - Darker blue for deep water
-- **`baseRoughness`**: `0.03` - Base roughness for calm water
-- **`maxRoughness`**: `0.12` - Maximum roughness for choppy water
-- **`WATER_F0`**: `vec3(0.018, 0.019, 0.020)` - Fresnel F0 for water-air interface
+- **`shallowWaterColor`**: `vec3(0.0, 0.5, 0.75)` - Bright turquoise for shallow water
+- **`baseRoughness`**: `0.03` - Very smooth calm water
+- **`maxRoughness`**: `0.12` - Choppy water maximum
+
+#### `WaterMaterial createClearTropicalWater()`
+Creates clear tropical water preset:
+- Less absorption (clearer water)
+- Brighter colors (more cyan)
+- Suitable for tropical/caribbean scenes
+
+#### `WaterMaterial createMurkyWater()`
+Creates murky/muddy water preset:
+- High absorption (murky water)
+- Brownish colors
+- Suitable for rivers, lakes, or polluted water
+
+#### `WaterMaterial createChoppyWater()`
+Creates rough/choppy water preset:
+- Higher base and max roughness
+- Suitable for stormy or windy conditions
+
+### Physical Constants
+
+These remain as compile-time constants (physical properties):
+
+- **`WATER_F0`**: `vec3(0.018, 0.019, 0.020)` - Fresnel F0 for water-air interface (based on IOR)
+- **`WATER_IOR`**: `1.33` - Index of refraction for water
+- **`AIR_IOR`**: `1.0` - Index of refraction for air
 
 ---
 
@@ -370,6 +417,9 @@ vec3 normal = getNormal(pos.xz, time, gradient);
 // Get lighting information
 LightingInfo light = evaluateLighting(sky, time);
 
+// Create water material (art-directable)
+WaterMaterial waterMaterial = createDefaultWaterMaterial();
+
 // Setup shading parameters
 WaterShadingParams params;
 params.pos = pos;
@@ -380,28 +430,49 @@ params.time = time;
 params.light = light;
 params.sky = sky;
 params.floorParams = terrainParams;
+params.material = waterMaterial;
 
 // Shade water
 WaterShadingResult result = shadeWater(params);
 vec3 color = result.color;
 ```
 
+### Custom Water Material
+```glsl
+// Create custom water material
+WaterMaterial waterMaterial = createDefaultWaterMaterial();
+waterMaterial.absorption = vec3(0.05, 0.02, 0.01);  // Clearer water
+waterMaterial.shallowWaterColor = vec3(0.0, 0.6, 0.8);  // More cyan
+waterMaterial.baseRoughness = 0.05;  // Slightly rougher
+
+// Or use a preset
+waterMaterial = createClearTropicalWater();
+
+// Use in shading
+WaterShadingParams params;
+// ... setup params ...
+params.material = waterMaterial;
+WaterShadingResult result = shadeWater(params);
+```
+
 ### Custom Roughness
 ```glsl
-// Calculate roughness manually
+// Calculate roughness manually with custom material
+WaterMaterial waterMaterial = createDefaultWaterMaterial();
 float waveHeight = getWaveHeight(pos.xz, time);
-float roughness = calculateWaterRoughness(gradient, waveHeight);
+float roughness = calculateWaterRoughness(gradient, waveHeight, waterMaterial);
 
 // Use in reflection calculation
 vec3 reflectedColor = calculateReflectedColor(
-    pos, normal, viewDir, time, gradient, sky, roughness
+    pos, normal, viewDir, time, gradient, sky, roughness, waterMaterial
 );
 ```
 
 ### Depth Calculation Only
 ```glsl
+WaterMaterial waterMaterial = createDefaultWaterMaterial();
 WaterDepthInfo depthInfo = calculateWaterDepthAndColor(
-    pos, normal, viewDir, terrainParams
+    pos, normal, viewDir, terrainParams, waterMaterial
 );
 
 float depth = depthInfo.depth;

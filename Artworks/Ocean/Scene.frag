@@ -23,6 +23,7 @@
 // ============================================================================
 
 #include "Common.frag"
+#include "MaterialSystem.frag"
 #include "CameraSystem.frag"
 #include "RenderPipeline.frag"
 
@@ -81,6 +82,13 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     SkyAtmosphere sky = createSkyPreset_Foggy();
     TerrainParams terrainParams = createDefaultOceanFloor();
     
+    // Create water material (art-directable - can be tweaked without recompilation)
+    WaterMaterial waterMaterial = createDefaultWaterMaterial();
+    // Example: Uncomment to use different water presets
+    // waterMaterial = createClearTropicalWater();
+    // waterMaterial = createMurkyWater();
+    // waterMaterial = createChoppyWater();
+    
     // Create render context
     RenderContext ctx;
     ctx.cameraPos = cam.position;
@@ -89,6 +97,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     ctx.sky = sky;
     ctx.terrainParams = terrainParams;
     ctx.camera = cam;
+    ctx.waterMaterial = waterMaterial;
     
     // Render scene using RenderPipeline
     // Returns both color and hit data (avoids duplicate raymarching)

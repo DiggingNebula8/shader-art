@@ -24,6 +24,7 @@
 #define RENDER_PIPELINE_FRAG
 
 #include "Common.frag"
+#include "MaterialSystem.frag"
 #include "CameraSystem.frag"
 #include "SkySystem.frag"
 #include "VolumeRaymarching.frag"
@@ -63,6 +64,7 @@ struct RenderContext {
     SkyAtmosphere sky;
     TerrainParams terrainParams;
     Camera camera;
+    WaterMaterial waterMaterial;  // Water material properties (art-directable)
 };
 
 // ============================================================================
@@ -94,6 +96,7 @@ vec3 composeFinalColor(SurfaceHit hit, RenderContext ctx) {
         waterParams.light = evaluateLighting(ctx.sky, ctx.time);
         waterParams.sky = ctx.sky;
         waterParams.floorParams = ctx.terrainParams;
+        waterParams.material = ctx.waterMaterial;
         
         // Shade water using WaterShading system
         WaterShadingResult waterResult = shadeWater(waterParams);
@@ -113,6 +116,7 @@ vec3 composeFinalColor(SurfaceHit hit, RenderContext ctx) {
         terrainParams.sky = ctx.sky;
         terrainParams.waterSurfacePos = hit.position;  // No water above
         terrainParams.waterNormal = vec3(0.0, 1.0, 0.0);
+        terrainParams.material = createDefaultTerrainMaterial();  // Use default terrain material
         
         return shadeTerrain(terrainParams);
     }

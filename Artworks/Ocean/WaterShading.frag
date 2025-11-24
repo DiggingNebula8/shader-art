@@ -16,6 +16,7 @@
 #define WATER_SHADING_FRAG
 
 #include "Common.frag"
+#include "MaterialSystem.frag"
 #include "SkySystem.frag"
 #include "VolumeRaymarching.frag"
 #include "WaveSystem.frag"
@@ -123,7 +124,7 @@ vec3 specularBRDF(vec3 normal, vec3 viewDir, vec3 lightDir, vec3 lightColor, flo
 }
 
 // Physically-Based Subsurface Scattering
-vec3 getSubsurfaceScattering(vec3 normal, vec3 viewDir, vec3 lightDir, float depth) {
+vec3 getSubsurfaceScattering(vec3 normal, vec3 viewDir, vec3 lightDir, float depth, WaterMaterial material) {
     vec3 backLight = -lightDir;
     
     const float g = 0.9;
@@ -132,7 +133,7 @@ vec3 getSubsurfaceScattering(vec3 normal, vec3 viewDir, vec3 lightDir, float dep
     phase /= 4.0 * PI;
     
     vec3 scatteringCoeff = vec3(0.0015, 0.003, 0.005);
-    vec3 absorptionCoeff = waterAbsorption;
+    vec3 absorptionCoeff = material.absorption;
     
     vec3 transmittance = exp(-absorptionCoeff * depth);
     vec3 singleScatter = scatteringCoeff * phase * transmittance;
@@ -147,7 +148,7 @@ vec3 getSubsurfaceScattering(vec3 normal, vec3 viewDir, vec3 lightDir, float dep
     
     vec3 totalScatter = singleScatter + multipleScatter;
     
-    vec3 shallowTint = shallowWaterColor;
+    vec3 shallowTint = material.shallowWaterColor;
     vec3 deepTint = vec3(0.0, 0.3, 0.5);
     
     float depthTintFactor = 1.0 - smoothstep(0.5, 15.0, depth);
@@ -162,7 +163,7 @@ vec3 getSubsurfaceScattering(vec3 normal, vec3 viewDir, vec3 lightDir, float dep
 // WATER ROUGHNESS & REFLECTION DISTORTION
 // ============================================================================
 
-float calculateWaterRoughness(vec2 gradient, float waveHeight) {
+float calculateWaterRoughness(vec2 gradient, float waveHeight, WaterMaterial material) {
     float slope = length(gradient);
     float steepnessFactor = smoothstep(0.2, 0.85, slope);
     
@@ -171,7 +172,7 @@ float calculateWaterRoughness(vec2 gradient, float waveHeight) {
     
     float curvatureProxy = slope * 1.5;
     
-    float roughness = mix(baseRoughness, maxRoughness, 
+    float roughness = mix(material.baseRoughness, material.maxRoughness, 
                          steepnessFactor * 0.6 + 
                          heightVariation * 0.25 + 
                          curvatureProxy * 0.15);
@@ -179,7 +180,7 @@ float calculateWaterRoughness(vec2 gradient, float waveHeight) {
     float microRoughness = slope * 0.4;
     roughness += microRoughness * 0.2;
     
-    return clamp(roughness, baseRoughness, maxRoughness * 1.2);
+    return clamp(roughness, material.baseRoughness, material.maxRoughness * 1.2);
 }
 
 vec3 getDistortedReflectionDir(vec3 reflectedDir, vec3 normal, float roughness, vec2 pos, float time) {
@@ -224,11 +225,12 @@ struct WaterShadingParams {
     vec3 pos;                    // Surface position
     vec3 normal;                 // Surface normal
     vec3 viewDir;                // View direction
-    vec2 gradient;                // Wave gradient
+    vec2 gradient;               // Wave gradient
     float time;                  // Time for animation
-    LightingInfo light;           // Lighting information (from SkySystem)
+    LightingInfo light;          // Lighting information (from SkySystem)
     SkyAtmosphere sky;           // Sky configuration (for reflections)
     TerrainParams floorParams;   // Terrain params (for depth calculation)
+    WaterMaterial material;      // Water material properties (art-directable)
 };
 
 struct WaterShadingResult {
@@ -241,14 +243,14 @@ struct WaterShadingResult {
 // WATER DEPTH CALCULATION
 // ============================================================================
 
-WaterDepthInfo calculateWaterDepthAndColor(vec3 pos, vec3 normal, vec3 viewDir, TerrainParams floorParams) {
+WaterDepthInfo calculateWaterDepthAndColor(vec3 pos, vec3 normal, vec3 viewDir, TerrainParams floorParams, WaterMaterial material) {
     WaterDepthInfo info;
     
     float floorHeight = getTerrainHeight(pos.xz, floorParams);
     info.depth = max(pos.y - floorHeight, 0.1);
     
     info.depthFactor = 1.0 - exp(-info.depth * 0.05);
-    info.waterColor = mix(shallowWaterColor, deepWaterColor, info.depthFactor);
+    info.waterColor = mix(material.shallowWaterColor, material.deepWaterColor, info.depthFactor);
     
     float viewAngle = 1.0 - max(dot(viewDir, normal), 0.0);
     vec3 angleTint = mix(vec3(1.0), vec3(0.95, 0.97, 1.0), viewAngle * 0.3);
@@ -260,12 +262,12 @@ WaterDepthInfo calculateWaterDepthAndColor(vec3 pos, vec3 normal, vec3 viewDir, 
 // ============================================================================
 // REFRACTION & REFLECTION CALCULATION
 // ============================================================================
-vec3 calculateRefractedColor(vec3 pos, vec3 normal, vec3 viewDir, WaterDepthInfo depthInfo, float time, TerrainParams floorParams, SkyAtmosphere sky) {
+vec3 calculateRefractedColor(vec3 pos, vec3 normal, vec3 viewDir, WaterDepthInfo depthInfo, float time, TerrainParams floorParams, SkyAtmosphere sky, WaterMaterial material) {
     float eta = AIR_IOR / WATER_IOR;
     vec3 refractedDir = refractRay(-viewDir, normal, eta);
     
     // Cache absorption calculation early (used in multiple places)
-    vec3 baseAbsorption = exp(-waterAbsorption * depthInfo.depth);
+    vec3 baseAbsorption = exp(-material.absorption * depthInfo.depth);
     
     vec3 refractedColor = depthInfo.waterColor * baseAbsorption;
     
@@ -278,8 +280,8 @@ vec3 calculateRefractedColor(vec3 pos, vec3 normal, vec3 viewDir, WaterDepthInfo
         
         if (hit.hit && hit.valid) {
             // Apply absorption based on path length
-            vec3 absorption = exp(-waterAbsorption * hit.distance);
-            vec3 waterTint = mix(shallowWaterColor, deepWaterColor, 1.0 - exp(-hit.distance * 0.04));
+            vec3 absorption = exp(-material.absorption * hit.distance);
+            vec3 waterTint = mix(material.shallowWaterColor, material.deepWaterColor, 1.0 - exp(-hit.distance * 0.04));
             refractedColor = mix(refractedColor, waterTint, 0.25) * absorption;
         }
     }
@@ -289,11 +291,11 @@ vec3 calculateRefractedColor(vec3 pos, vec3 normal, vec3 viewDir, WaterDepthInfo
 
 // Calculate reflected color
 // If dynamicRoughness < 0, it will be computed from gradient and waveHeight
-vec3 calculateReflectedColor(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient, SkyAtmosphere sky, float dynamicRoughness) {
+vec3 calculateReflectedColor(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient, SkyAtmosphere sky, float dynamicRoughness, WaterMaterial material) {
     if (dynamicRoughness < 0.0) {
         // Compute roughness if not provided
         float waveHeight = getWaveHeight(pos.xz, time);
-        dynamicRoughness = calculateWaterRoughness(gradient, waveHeight);
+        dynamicRoughness = calculateWaterRoughness(gradient, waveHeight, material);
     }
     
     // Calculate reflection direction once and reuse
@@ -312,11 +314,11 @@ vec3 calculateReflectedColor(vec3 pos, vec3 normal, vec3 viewDir, float time, ve
     
     vec3 reflectedColor = skyColor(distortedReflectedDir, sky, time);
     
-    float roughnessFactor = smoothstep(baseRoughness, maxRoughness, dynamicRoughness);
+    float roughnessFactor = smoothstep(material.baseRoughness, material.maxRoughness, dynamicRoughness);
     // Use fixed sample count to avoid temporal flickering
     const int numSamples = 2; // Fixed sample count for temporal stability
     
-    if (numSamples > 1 && dynamicRoughness > baseRoughness * 1.5) {
+    if (numSamples > 1 && dynamicRoughness > material.baseRoughness * 1.5) {
         vec3 sampleSum = reflectedColor;
         float sampleWeight = 1.0;
         
@@ -356,7 +358,7 @@ struct WaterLightingResult {
 };
 
 WaterLightingResult calculateWaterLighting(vec3 pos, vec3 normal, vec3 viewDir, vec3 refractedColor, vec3 reflectedColor, 
-                                          WaterDepthInfo depthInfo, float time, vec2 gradient, SkyAtmosphere sky, LightingInfo light, float dynamicRoughness) {
+                                          WaterDepthInfo depthInfo, float time, vec2 gradient, SkyAtmosphere sky, LightingInfo light, float dynamicRoughness, WaterMaterial material) {
     WaterLightingResult result;
     
     result.dynamicRoughness = dynamicRoughness;
@@ -383,7 +385,7 @@ WaterLightingResult calculateWaterLighting(vec3 pos, vec3 normal, vec3 viewDir, 
     
     vec3 hemisphereAvg = skyUpColor * 0.5;
     
-    vec3 waterAlbedo = mix(shallowWaterColor, deepWaterColor, depthInfo.depthFactor * 0.5);
+    vec3 waterAlbedo = mix(material.shallowWaterColor, material.deepWaterColor, depthInfo.depthFactor * 0.5);
     waterAlbedo *= 0.3;
     ambientDiffuse += hemisphereAvg * kD * waterAlbedo * skyUpWeight;
     
@@ -393,7 +395,7 @@ WaterLightingResult calculateWaterLighting(vec3 pos, vec3 normal, vec3 viewDir, 
     if (result.reflectedDir.y > 0.0) {
         normalReflectedColor = skyColor(result.reflectedDir, sky, time);
         
-        if (result.dynamicRoughness > baseRoughness * 1.2) {
+        if (result.dynamicRoughness > material.baseRoughness * 1.2) {
             const int numIBLSamples = 3;
             vec3 sampleSum = normalReflectedColor;
             float sampleWeight = 1.0;
@@ -427,7 +429,7 @@ WaterLightingResult calculateWaterLighting(vec3 pos, vec3 normal, vec3 viewDir, 
     
     vec3 diffuse = kD * waterAlbedo * lightColor * NdotL / PI;
     
-    vec3 subsurface = getSubsurfaceScattering(normal, viewDir, lightDir, depthInfo.depth);
+    vec3 subsurface = getSubsurfaceScattering(normal, viewDir, lightDir, depthInfo.depth, material);
     
     vec3 ambient = ambientDiffuse + ambientSpecular * 0.3;
     
@@ -442,7 +444,7 @@ WaterLightingResult calculateWaterLighting(vec3 pos, vec3 normal, vec3 viewDir, 
         float volumetricFactor = phase * NdotL * (1.0 - exp(-depthInfo.depth * 0.02));
         vec3 volumetricLight = light.sunColor * light.sunIntensity * volumetricFactor * 0.05;
         
-        volumetricLight *= mix(vec3(1.0), shallowWaterColor, 1.0 - depthInfo.depthFactor);
+        volumetricLight *= mix(vec3(1.0), material.shallowWaterColor, 1.0 - depthInfo.depthFactor);
         waterBase += volumetricLight;
     }
     
@@ -458,21 +460,21 @@ WaterShadingResult shadeWater(WaterShadingParams params) {
     WaterShadingResult result;
     
     // Calculate water depth and base color
-    WaterDepthInfo depthInfo = calculateWaterDepthAndColor(params.pos, params.normal, params.viewDir, params.floorParams);
+    WaterDepthInfo depthInfo = calculateWaterDepthAndColor(params.pos, params.normal, params.viewDir, params.floorParams, params.material);
     
     // Compute roughness once (used by both reflection and lighting)
     float waveHeight = getWaveHeight(params.pos.xz, params.time);
-    float dynamicRoughness = calculateWaterRoughness(params.gradient, waveHeight);
+    float dynamicRoughness = calculateWaterRoughness(params.gradient, waveHeight, params.material);
     
     // Calculate refracted color
-    vec3 refractedColor = calculateRefractedColor(params.pos, params.normal, params.viewDir, depthInfo, params.time, params.floorParams, params.sky);
+    vec3 refractedColor = calculateRefractedColor(params.pos, params.normal, params.viewDir, depthInfo, params.time, params.floorParams, params.sky, params.material);
     
     // Calculate reflected color (pass precomputed roughness)
-    vec3 reflectedColor = calculateReflectedColor(params.pos, params.normal, params.viewDir, params.time, params.gradient, params.sky, dynamicRoughness);
+    vec3 reflectedColor = calculateReflectedColor(params.pos, params.normal, params.viewDir, params.time, params.gradient, params.sky, dynamicRoughness, params.material);
     
     // Calculate final lighting (pass precomputed roughness)
     WaterLightingResult lighting = calculateWaterLighting(params.pos, params.normal, params.viewDir, refractedColor, reflectedColor, 
-                                                          depthInfo, params.time, params.gradient, params.sky, params.light, dynamicRoughness);
+                                                          depthInfo, params.time, params.gradient, params.sky, params.light, dynamicRoughness, params.material);
     
     result.color = lighting.color;
     result.dynamicRoughness = lighting.dynamicRoughness;

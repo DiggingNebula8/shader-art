@@ -24,13 +24,10 @@
 //   - WATER_IOR: 1.33 - Index of refraction for water
 //   - AIR_IOR: 1.0 - Index of refraction for air
 //
-// Water Material Constants:
-//   - waterAbsorption: vec3(0.15, 0.045, 0.015) - Water absorption coefficients (m^-1)
-//   - deepWaterColor: vec3(0.0, 0.2, 0.4) - Color for deep water (darker blue)
-//   - shallowWaterColor: vec3(0.0, 0.5, 0.75) - Color for shallow water (bright turquoise)
-//   - baseRoughness: 0.03 - Base roughness for calm water (very smooth)
-//   - maxRoughness: 0.12 - Maximum roughness for choppy water
-//   - WATER_F0: vec3(0.018, 0.019, 0.020) - Wavelength-dependent Fresnel F0 for water-air interface
+// Physical Material Constants:
+//   - WATER_F0: vec3(0.018, 0.019, 0.020) - Wavelength-dependent Fresnel F0 (physical constant)
+//
+// Note: Art-directable materials (WaterMaterial, etc.) are defined in MaterialSystem.frag
 //
 // ============================================================================
 
@@ -55,12 +52,7 @@ const float GRAVITY = 9.81;
 const float WATER_IOR = 1.33;
 const float AIR_IOR = 1.0;
 
-// Water Material Constants
-const vec3 waterAbsorption = vec3(0.15, 0.045, 0.015);
-const vec3 deepWaterColor = vec3(0.0, 0.2, 0.4);
-const vec3 shallowWaterColor = vec3(0.0, 0.5, 0.75);
-const float baseRoughness = 0.03;
-const float maxRoughness = 0.12;
+// Physical constant (not art-directable - based on IOR)
 const vec3 WATER_F0 = vec3(0.018, 0.019, 0.020);
 
 // Simple hash function for pseudo-random noise
