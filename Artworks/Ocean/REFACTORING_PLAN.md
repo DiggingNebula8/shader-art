@@ -61,13 +61,13 @@ Scene.frag (or RenderPipeline.frag)
    - PBR functions (BRDF, subsurface scattering)
    - No dependencies on Terrain/Sky (uses interfaces)
 
-5. **TerrainShading.frag** (extract from OceanSystem)
+3. **TerrainShading.frag** (extract from OceanSystem)
    - Terrain material properties
    - `shadeOceanFloor()` - shades terrain with caustics
    - Terrain-specific lighting and material functions
    - Uses TerrainParams for configuration
 
-3. **VolumeRaymarching.frag** (NEW - unified raymarching system)
+4. **VolumeRaymarching.frag** (NEW - unified raymarching system)
    - Generic volume raymarching that accepts SDF functions
    - `raymarchSurfaceCore()` - raymarch to find surface intersections
    - `raymarchVolumeCore()` - raymarch through volumes (water, clouds, etc.)
@@ -87,11 +87,11 @@ Scene.frag (or RenderPipeline.frag)
 ## Implementation Steps
 
 ### Phase 1: Extract Wave System
-- [ ] Create `WaveSystem.frag`
-- [ ] Move wave generation functions from OceanSystem
-- [ ] Remove Sky/Terrain dependencies
-- [ ] Add `getWaveSDF()` function for VolumeRaymarching
-- [ ] Update OceanSystem to include WaveSystem (temporary during transition)
+- [x] Create `WaveSystem.frag`
+- [x] Move wave generation functions from OceanSystem
+- [x] Remove Sky/Terrain dependencies
+- [x] Add `getWaveSDF()` function for VolumeRaymarching
+- [x] Update OceanSystem to include WaveSystem (temporary during transition)
 
 ### Phase 2: Create Unified Volume Raymarching
 - [ ] Create `VolumeRaymarching.frag` - MAIN RAYMARCHING SOURCE
