@@ -15,7 +15,6 @@ const float MAX_DIST = 150.0;
 
 // Physical Constants
 const float GRAVITY = 9.81;
-const vec3 F0_WATER = vec3(0.02);
 
 // log2 implementation (fallback for older GLSL versions)
 float log2_impl(float x) {
