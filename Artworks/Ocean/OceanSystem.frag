@@ -369,7 +369,7 @@ vec3 getSubsurfaceScattering(vec3 normal, vec3 viewDir, vec3 lightDir, float dep
 // ============================================================================
 
 // Raymarch through water to find the ocean floor
-vec3 raymarchThroughWater(vec3 startPos, vec3 rayDir, float time, OceanFloorParams floorParams) {
+vec3 raymarchThroughWater(vec3 startPos, vec3 rayDir, float time, TerrainParams floorParams) {
     float t = 0.0;
     const float MAX_WATER_DEPTH = 200.0;
     const float WATER_STEP_SIZE = 0.5;
@@ -377,7 +377,7 @@ vec3 raymarchThroughWater(vec3 startPos, vec3 rayDir, float time, OceanFloorPara
     for (int i = 0; i < 200; i++) {
         vec3 pos = startPos + rayDir * t;
         
-        float floorHeight = getOceanFloorHeight(pos.xz, floorParams);
+        float floorHeight = getTerrainHeight(pos.xz, floorParams);
         float distToFloor = pos.y - floorHeight;
         
         if (distToFloor < MIN_DIST) {
@@ -409,7 +409,7 @@ vec3 refractRay(vec3 incident, vec3 normal, float eta) {
 }
 
 // Realistic Caustics Calculation
-vec3 calculateCaustics(vec3 floorPos, vec3 waterSurfacePos, vec3 waterNormal, vec3 sunDir, float time, OceanFloorParams floorParams) {
+vec3 calculateCaustics(vec3 floorPos, vec3 waterSurfacePos, vec3 waterNormal, vec3 sunDir, float time, TerrainParams floorParams) {
     float eta = AIR_IOR / WATER_IOR;
     vec3 refractedSunDir = refractRay(-sunDir, waterNormal, eta);
     
@@ -475,7 +475,7 @@ vec3 calculateCaustics(vec3 floorPos, vec3 waterSurfacePos, vec3 waterNormal, ve
 }
 
 // Shade the ocean floor with caustics
-vec3 shadeOceanFloor(vec3 floorPos, vec3 viewDir, vec3 normal, float time, OceanFloorParams floorParams, SkyAtmosphere sky, vec3 waterSurfacePos, vec3 waterNormal) {
+vec3 shadeOceanFloor(vec3 floorPos, vec3 viewDir, vec3 normal, float time, TerrainParams floorParams, SkyAtmosphere sky, vec3 waterSurfacePos, vec3 waterNormal) {
     LightingInfo light = evaluateLighting(sky, time);
     vec3 sunDir = light.sunDirection;
     vec3 sunColor = light.sunColor;
@@ -484,7 +484,7 @@ vec3 shadeOceanFloor(vec3 floorPos, vec3 viewDir, vec3 normal, float time, Ocean
     const vec3 floorColorBase = vec3(0.3, 0.25, 0.2);
     const float floorRoughness = 0.8;
     
-    float floorHeight = getOceanFloorHeight(floorPos.xz, floorParams);
+    float floorHeight = getTerrainHeight(floorPos.xz, floorParams);
     float depthVariation = (floorHeight - floorParams.baseHeight) / floorParams.heightVariation;
     vec3 floorColor = mix(floorColorBase * 0.7, floorColorBase * 1.3, depthVariation * 0.5 + 0.5);
     
@@ -567,10 +567,10 @@ struct WaterDepthInfo {
     vec3 waterColor;
 };
 
-WaterDepthInfo calculateWaterDepthAndColor(vec3 pos, vec3 normal, vec3 viewDir, OceanFloorParams floorParams) {
+WaterDepthInfo calculateWaterDepthAndColor(vec3 pos, vec3 normal, vec3 viewDir, TerrainParams floorParams) {
     WaterDepthInfo info;
     
-    float floorHeight = getOceanFloorHeight(pos.xz, floorParams);
+    float floorHeight = getTerrainHeight(pos.xz, floorParams);
     info.depth = max(pos.y - floorHeight, 0.1);
     
     info.depthFactor = 1.0 - exp(-info.depth * 0.05);
@@ -583,7 +583,7 @@ WaterDepthInfo calculateWaterDepthAndColor(vec3 pos, vec3 normal, vec3 viewDir, 
     return info;
 }
 
-vec3 calculateRefractedColor(vec3 pos, vec3 normal, vec3 viewDir, WaterDepthInfo depthInfo, float time, OceanFloorParams floorParams, SkyAtmosphere sky) {
+vec3 calculateRefractedColor(vec3 pos, vec3 normal, vec3 viewDir, WaterDepthInfo depthInfo, float time, TerrainParams floorParams, SkyAtmosphere sky) {
     float eta = AIR_IOR / WATER_IOR;
     vec3 refractedDir = refractRay(-viewDir, normal, eta);
     
@@ -600,7 +600,7 @@ vec3 calculateRefractedColor(vec3 pos, vec3 normal, vec3 viewDir, WaterDepthInfo
         
         if (hitFloor > 0.5) {
             vec3 floorPos = pos + refractedDir * waterPathLength;
-            vec3 floorNormal = getOceanFloorNormal(floorPos, floorParams);
+            vec3 floorNormal = getTerrainNormal(floorPos, floorParams);
             
             vec3 floorColor = shadeOceanFloor(floorPos, -refractedDir, floorNormal, time, floorParams, sky, pos, normal);
             

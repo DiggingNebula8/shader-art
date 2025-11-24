@@ -15,6 +15,18 @@
 #include "Common.frag"
 
 // ============================================================================
+// CONSTANTS
+// ============================================================================
+
+const float MIN_AMPLITUDE_THRESHOLD = 0.001;
+const float DOMAIN_WARP_SCALE = 10.0;
+const float ROUGHNESS_MULTIPLIER = 0.3;
+const float EROSION_MULTIPLIER = 0.5;
+const float EROSION_REDUCTION = 0.7;
+const float DEFAULT_LACUNARITY = 2.0;
+const float NOISE_NORMALIZATION_EPSILON = 1e-6;
+
+// ============================================================================
 // TERRAIN PARAMETERS
 // ============================================================================
 
@@ -73,29 +85,35 @@ float ridgedNoise(vec2 p, float scale, int octaves, float persistence) {
         maxValue += amplitude;
         
         amplitude *= persistence;
-        frequency *= 2.0;
+        frequency *= DEFAULT_LACUNARITY;
     }
     
-    return value / max(maxValue, 1e-6);
+    return value / max(maxValue, NOISE_NORMALIZATION_EPSILON);
 }
 
 // Domain warping - warps the domain before sampling noise for more natural patterns
 // Creates flowing, organic terrain features
 vec2 domainWarp(vec2 p, float strength) {
-    if (strength < 0.001) return p;
+    if (strength < MIN_AMPLITUDE_THRESHOLD) return p;
     
-    // Use noise to warp the domain
+    const float warpScale1 = 0.5;
+    const float warpScale2 = 0.25;
+    const vec2 offset1 = vec2(100.0, 100.0);
+    const vec2 offset2 = vec2(50.0, 50.0);
+    
+    // First warp layer
     vec2 warp1 = vec2(
-        smoothNoise(p * 0.5) * 2.0 - 1.0,
-        smoothNoise((p + vec2(100.0, 100.0)) * 0.5) * 2.0 - 1.0
+        smoothNoise(p * warpScale1) * 2.0 - 1.0,
+        smoothNoise((p + offset1) * warpScale1) * 2.0 - 1.0
     );
     
+    // Second warp layer (refined)
     vec2 warp2 = vec2(
-        smoothNoise((p + warp1 * 2.0) * 0.25) * 2.0 - 1.0,
-        smoothNoise((p + warp1 * 2.0 + vec2(50.0, 50.0)) * 0.25) * 2.0 - 1.0
+        smoothNoise((p + warp1 * 2.0) * warpScale2) * 2.0 - 1.0,
+        smoothNoise((p + warp1 * 2.0 + offset2) * warpScale2) * 2.0 - 1.0
     );
     
-    return p + (warp1 + warp2 * 0.5) * strength * 10.0;
+    return p + (warp1 + warp2 * 0.5) * strength * DOMAIN_WARP_SCALE;
 }
 
 // Billow noise - creates billowy, cloud-like patterns
@@ -114,18 +132,18 @@ float billowNoise(vec2 p, float scale, int octaves, float persistence) {
         maxValue += amplitude;
         
         amplitude *= persistence;
-        frequency *= 2.0;
+        frequency *= DEFAULT_LACUNARITY;
     }
     
-    return value / max(maxValue, 1e-6);
+    return value / max(maxValue, NOISE_NORMALIZATION_EPSILON);
 }
 
 // ============================================================================
-// TERRAIN GENERATION FUNCTIONS
+// TERRAIN PRESET HELPERS
 // ============================================================================
 
-// Create default terrain parameters
-TerrainParams createDefaultTerrain() {
+// Initialize terrain parameters with default values
+TerrainParams initTerrainParams() {
     TerrainParams params;
     params.baseHeight = 0.0;
     params.heightVariation = 50.0;
@@ -143,36 +161,36 @@ TerrainParams createDefaultTerrain() {
     params.valleyness = 0.0;
     params.octaves = 4;
     params.persistence = 0.5;
-    params.lacunarity = 2.0;
+    params.lacunarity = DEFAULT_LACUNARITY;
     return params;
 }
 
-// Create ocean floor terrain parameters (backward compatibility)
+// ============================================================================
+// TERRAIN PRESETS
+// ============================================================================
+
+TerrainParams createDefaultTerrain() {
+    return initTerrainParams();
+}
+
+// Low-poly, flat terrain optimized for ocean floor
 TerrainParams createDefaultOceanFloor() {
-    TerrainParams params;
+    TerrainParams params = initTerrainParams();
     params.baseHeight = -105.0;
-    params.heightVariation = 25.0;
-    params.largeScale = 0.02;
-    params.mediumScale = 0.08;
-    params.smallScale = 0.3;
-    params.largeAmplitude = 0.6;
-    params.mediumAmplitude = 0.3;
-    params.smallAmplitude = 0.1;
-    params.roughness = 0.5;
-    params.ridgedness = 0.0;
-    params.domainWarp = 0.1;
-    params.erosion = 0.2;
-    params.mountainness = 0.0;
-    params.valleyness = 0.3;
-    params.octaves = 3;
-    params.persistence = 0.5;
-    params.lacunarity = 2.0;
+    params.heightVariation = 2.0;
+    params.largeScale = 0.005;
+    params.mediumScale = 0.02;
+    params.smallScale = 0.1;
+    params.largeAmplitude = 1.0;
+    params.mediumAmplitude = 0.0;
+    params.smallAmplitude = 0.0;
+    params.roughness = 0.0;
+    params.octaves = 1;
     return params;
 }
 
-// Create mountainous terrain preset
 TerrainParams createMountainTerrain() {
-    TerrainParams params;
+    TerrainParams params = initTerrainParams();
     params.baseHeight = 100.0;
     params.heightVariation = 200.0;
     params.largeScale = 0.005;
@@ -189,13 +207,11 @@ TerrainParams createMountainTerrain() {
     params.valleyness = 0.5;
     params.octaves = 6;
     params.persistence = 0.6;
-    params.lacunarity = 2.0;
     return params;
 }
 
-// Create hilly terrain preset
 TerrainParams createHillyTerrain() {
-    TerrainParams params;
+    TerrainParams params = initTerrainParams();
     params.baseHeight = 20.0;
     params.heightVariation = 80.0;
     params.largeScale = 0.01;
@@ -212,13 +228,11 @@ TerrainParams createHillyTerrain() {
     params.valleyness = 0.2;
     params.octaves = 5;
     params.persistence = 0.55;
-    params.lacunarity = 2.0;
     return params;
 }
 
-// Create plains/flat terrain preset
 TerrainParams createPlainsTerrain() {
-    TerrainParams params;
+    TerrainParams params = initTerrainParams();
     params.baseHeight = 0.0;
     params.heightVariation = 10.0;
     params.largeScale = 0.02;
@@ -228,99 +242,101 @@ TerrainParams createPlainsTerrain() {
     params.mediumAmplitude = 0.4;
     params.smallAmplitude = 0.2;
     params.roughness = 0.2;
-    params.ridgedness = 0.0;
     params.domainWarp = 0.1;
     params.erosion = 0.5;
-    params.mountainness = 0.0;
-    params.valleyness = 0.0;
     params.octaves = 3;
     params.persistence = 0.4;
-    params.lacunarity = 2.0;
     return params;
 }
 
+// ============================================================================
+// TERRAIN GENERATION CORE FUNCTIONS
+// ============================================================================
+
+// Sample noise at a specific scale with optional offset
+float sampleScaleNoise(vec2 pos, float scale, int octaves, float persistence, vec2 offset) {
+    return fractalNoise(pos + offset, scale, octaves, persistence);
+}
+
+// Apply ridged noise mixing if needed
+float applyRidgedNoise(vec2 pos, float baseNoise, float scale, int octaves, float persistence, float ridgedness, float mountainness) {
+    if (ridgedness < MIN_AMPLITUDE_THRESHOLD || mountainness < MIN_AMPLITUDE_THRESHOLD) {
+        return baseNoise;
+    }
+    
+    float ridged = ridgedNoise(pos, scale * 0.5, octaves, persistence);
+    return mix(baseNoise, ridged, ridgedness * mountainness);
+}
+
+// Apply valley noise mixing if needed
+float applyValleyNoise(vec2 pos, float baseNoise, float scale, float valleyness) {
+    if (valleyness < MIN_AMPLITUDE_THRESHOLD) {
+        return baseNoise;
+    }
+    
+    const vec2 valleyOffset = vec2(200.0, 200.0);
+    float valleyNoise = 1.0 - abs(fractalNoise(pos + valleyOffset, scale * 0.7, 2, 0.6));
+    return mix(baseNoise, valleyNoise, valleyness);
+}
+
 // Main terrain height function - generates terrain height at position (x, z)
-// Returns the Y coordinate of the terrain
 float getTerrainHeight(vec2 pos, TerrainParams params) {
-    // Apply domain warping for more natural patterns
-    vec2 warpedPos = domainWarp(pos, params.domainWarp);
+    // Apply domain warping if enabled
+    vec2 warpedPos = (params.domainWarp > MIN_AMPLITUDE_THRESHOLD) 
+        ? domainWarp(pos, params.domainWarp) 
+        : pos;
     
-    // Large-scale terrain (hills, valleys, major features)
-    vec2 largePos = warpedPos;
-    float largeNoise = fractalNoise(largePos, params.largeScale, params.octaves, params.persistence);
+    float heightVariation = 0.0;
     
-    // Add ridged noise for mountain-like features
-    float largeRidged = 0.0;
-    if (params.ridgedness > 0.001) {
-        largeRidged = ridgedNoise(largePos, params.largeScale * 0.5, params.octaves, params.persistence);
-        largeNoise = mix(largeNoise, largeRidged, params.ridgedness * params.mountainness);
+    // Large-scale terrain
+    if (params.largeAmplitude > MIN_AMPLITUDE_THRESHOLD) {
+        float largeNoise = sampleScaleNoise(warpedPos, params.largeScale, params.octaves, params.persistence, vec2(0.0));
+        largeNoise = applyRidgedNoise(warpedPos, largeNoise, params.largeScale, params.octaves, params.persistence, params.ridgedness, params.mountainness);
+        heightVariation += (largeNoise - 0.5) * 2.0 * params.largeAmplitude;
     }
     
-    float largeHeight = (largeNoise - 0.5) * 2.0; // [-1, 1]
-    
-    // Medium-scale terrain (ridges, slopes, secondary features)
-    vec2 mediumPos = warpedPos + vec2(100.0, 100.0);
-    float mediumNoise = fractalNoise(mediumPos, params.mediumScale, params.octaves - 1, params.persistence);
-    
-    // Add valley features using inverted noise
-    if (params.valleyness > 0.001) {
-        float valleyNoise = 1.0 - abs(fractalNoise(mediumPos + vec2(200.0, 200.0), 
-                                                     params.mediumScale * 0.7, 2, 0.6));
-        mediumNoise = mix(mediumNoise, valleyNoise, params.valleyness);
+    // Medium-scale terrain
+    if (params.mediumAmplitude > MIN_AMPLITUDE_THRESHOLD) {
+        const vec2 mediumOffset = vec2(100.0, 100.0);
+        float mediumNoise = sampleScaleNoise(warpedPos, params.mediumScale, params.octaves - 1, params.persistence, mediumOffset);
+        mediumNoise = applyValleyNoise(warpedPos + mediumOffset, mediumNoise, params.mediumScale, params.valleyness);
+        heightVariation += (mediumNoise - 0.5) * 2.0 * params.mediumAmplitude;
     }
     
-    float mediumHeight = (mediumNoise - 0.5) * 2.0; // [-1, 1]
-    
-    // Small-scale terrain (detail, bumps, micro-features)
-    vec2 smallPos = warpedPos + vec2(200.0, 200.0);
-    float smallNoise = fractalNoise(smallPos, params.smallScale, params.octaves - 2, params.persistence);
-    float smallHeight = (smallNoise - 0.5) * 2.0; // [-1, 1]
-    
-    // Combine all scales with their amplitudes
-    float heightVariation = largeHeight * params.largeAmplitude +
-                           mediumHeight * params.mediumAmplitude +
-                           smallHeight * params.smallAmplitude;
-    
-    // Apply roughness (adds more variation and detail)
-    if (params.roughness > 0.001) {
-        float roughNoise = billowNoise(warpedPos + vec2(300.0, 300.0), 
-                                      params.smallScale * 1.5, 2, 0.7);
-        float roughHeight = (roughNoise - 0.5) * 2.0;
-        heightVariation += roughHeight * params.roughness * 0.3;
+    // Small-scale terrain (detail)
+    if (params.smallAmplitude > MIN_AMPLITUDE_THRESHOLD) {
+        const vec2 smallOffset = vec2(200.0, 200.0);
+        float smallNoise = sampleScaleNoise(warpedPos, params.smallScale, params.octaves - 2, params.persistence, smallOffset);
+        heightVariation += (smallNoise - 0.5) * 2.0 * params.smallAmplitude;
     }
     
-    // Apply erosion-like smoothing (reduces extreme peaks)
-    if (params.erosion > 0.001) {
-        heightVariation = mix(heightVariation, heightVariation * 0.7, params.erosion * 0.5);
+    // Apply roughness detail
+    if (params.roughness > MIN_AMPLITUDE_THRESHOLD) {
+        const vec2 roughOffset = vec2(300.0, 300.0);
+        float roughNoise = billowNoise(warpedPos + roughOffset, params.smallScale * 1.5, 2, 0.7);
+        heightVariation += (roughNoise - 0.5) * 2.0 * params.roughness * ROUGHNESS_MULTIPLIER;
     }
     
-    // Scale by height variation parameter and add to base height
-    float terrainHeight = params.baseHeight + heightVariation * params.heightVariation;
+    // Apply erosion smoothing
+    if (params.erosion > MIN_AMPLITUDE_THRESHOLD) {
+        heightVariation = mix(heightVariation, heightVariation * EROSION_REDUCTION, params.erosion * EROSION_MULTIPLIER);
+    }
     
-    return terrainHeight;
+    return params.baseHeight + heightVariation * params.heightVariation;
 }
 
 // Get terrain normal (for shading and lighting)
 vec3 getTerrainNormal(vec3 pos, TerrainParams params) {
-    const float eps = 0.5;
+    const float epsilon = 1.0;
     
-    float hL = getTerrainHeight(pos.xz - vec2(eps, 0.0), params);
-    float hR = getTerrainHeight(pos.xz + vec2(eps, 0.0), params);
-    float hD = getTerrainHeight(pos.xz - vec2(0.0, eps), params);
-    float hU = getTerrainHeight(pos.xz + vec2(0.0, eps), params);
+    float hL = getTerrainHeight(pos.xz - vec2(epsilon, 0.0), params);
+    float hR = getTerrainHeight(pos.xz + vec2(epsilon, 0.0), params);
+    float hD = getTerrainHeight(pos.xz - vec2(0.0, epsilon), params);
+    float hU = getTerrainHeight(pos.xz + vec2(0.0, epsilon), params);
     
-    vec3 normal = normalize(vec3(hL - hR, 2.0 * eps, hD - hU));
+    // Calculate normal using central differences
+    vec3 normal = normalize(vec3(hL - hR, 2.0 * epsilon, hD - hU));
     return normal;
 }
 
-// ============================================================================
-// BACKWARD COMPATIBILITY ALIASES
-// ============================================================================
-
-// Alias for backward compatibility with ocean floor system
-#define OceanFloorParams TerrainParams
-#define getOceanFloorHeight getTerrainHeight
-#define getOceanFloorNormal getTerrainNormal
-
 #endif // TERRAIN_SYSTEM_FRAG
-
