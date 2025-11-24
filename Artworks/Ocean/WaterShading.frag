@@ -149,7 +149,7 @@ vec3 getSubsurfaceScattering(vec3 normal, vec3 viewDir, vec3 lightDir, float dep
     vec3 totalScatter = singleScatter + multipleScatter;
     
     vec3 shallowTint = material.shallowWaterColor;
-    vec3 deepTint = vec3(0.0, 0.3, 0.5);
+    vec3 deepTint = material.deepWaterColor;
     
     float depthTintFactor = 1.0 - smoothstep(0.5, 15.0, depth);
     vec3 scatterColor = mix(deepTint, shallowTint, depthTintFactor);
