@@ -1,14 +1,14 @@
 // ============================================================================
 // OCEAN SCENE - Main Rendering Entry Point
 // ============================================================================
-// Combines Camera, Sky, and Ocean systems to render a complete ocean scene
+// Thin wrapper that uses RenderPipeline for orchestration
+// Handles camera setup, post-processing, and tone mapping
 // ============================================================================
 
-// Include all systems
+// Include RenderPipeline (which includes all systems)
 #include "Common.frag"
 #include "CameraSystem.frag"
-#include "SkySystem.frag"
-#include "OceanSystem.frag"
+#include "RenderPipeline.frag"
 
 // ============================================================================
 // TONE MAPPING
@@ -62,53 +62,30 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec2 uv = fragCoord / iResolution.xy;
     vec3 rd = generateCameraRay(cam, uv, iResolution.xy);
     
-    // Raymarch ocean surface
-    vec3 pos = raymarchOcean(cam.position, rd, iTime);
-    
-    // Calculate distance for depth of field
-    float distance = length(pos - cam.position);
-    
-    // Create sky once and reuse throughout
+    // Create sky and terrain configuration
     SkyAtmosphere sky = createSkyPreset_Foggy();
+    TerrainParams terrainParams = createDefaultOceanFloor();
     
-    // Background - render sky if we didn't hit the ocean
-    if (distance > MAX_DIST * 0.95) {
-        vec3 bgColor = skyColor(rd, sky, iTime);
-        
-        // Apply fog to background sky for consistency
-        // Use a far point along the ray for fog calculation
-        vec3 farPos = cam.position + rd * MAX_DIST;
-        bgColor = applyAtmosphericFog(bgColor, farPos, cam.position, rd, sky, iTime);
-        
-        // Camera exposure + optional DOF + tone mapping + gamma, same as ocean path
-        bgColor = applyExposure(bgColor, cam);
-        bgColor = applyDepthOfField(bgColor, distance, cam);
-        bgColor = toneMapReinhardJodie(bgColor);
-        bgColor = pow(bgColor, vec3(1.0 / 2.2));
-        
-        fragColor = vec4(bgColor, 1.0);
-        return;
-    }
+    // Create render context
+    RenderContext ctx;
+    ctx.cameraPos = cam.position;
+    ctx.rayDir = rd;
+    ctx.time = iTime;
+    ctx.sky = sky;
+    ctx.terrainParams = terrainParams;
+    ctx.camera = cam;
     
-    // Stabilize position to reduce jittering
-    // Use a small snap grid for XZ to ensure consistent sampling
-    // Recalculate Y from the snapped XZ to maintain accuracy
-    const float positionSnap = 0.0005;
-    vec2 snappedXZ = floor(pos.xz / positionSnap + 0.5) * positionSnap;
-    float stableY = getWaveHeight(snappedXZ, iTime);
-    vec3 stablePos = vec3(snappedXZ.x, stableY, snappedXZ.y);
+    // Render scene using RenderPipeline
+    vec3 color = renderScene(cam.position, rd, iTime, ctx);
     
-    // Compute normal (gradient computed here and passed through to avoid redundant computation)
-    vec2 gradient;
-    vec3 normal = getNormal(stablePos.xz, iTime, gradient);
-    vec3 viewDir = -rd;
-    
-    // Shade ocean with sky configuration - use stable position for consistent results
-    vec3 color = shadeOcean(stablePos, normal, viewDir, iTime, gradient, sky);
+    // Calculate distance for depth of field and fog
+    // Raymarch to get hit position (needed for fog calculation)
+    VolumeHit waterHit = raymarchWaveSurface(cam.position, rd, MAX_DIST, iTime);
+    float distance = waterHit.hit && waterHit.valid ? waterHit.distance : MAX_DIST;
+    vec3 hitPos = waterHit.hit && waterHit.valid ? waterHit.position : (cam.position + rd * MAX_DIST);
     
     // Apply atmospheric fog/haze using the SkyAtmosphere system
-    // Use stablePos for fog calculation to match shading position
-    color = applyAtmosphericFog(color, stablePos, cam.position, rd, sky, iTime);
+    color = applyAtmosphericFog(color, hitPos, cam.position, rd, sky, iTime);
     
     // Apply camera exposure (physically-based)
     // This multiplies the color by the exposure value

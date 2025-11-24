@@ -126,10 +126,10 @@ Scene.frag (or RenderPipeline.frag)
 - [x] Implement high-level rendering functions
 
 ### Phase 5: Refactor Scene.frag
-- [ ] Make Scene.frag thin wrapper
-- [ ] Use RenderPipeline for orchestration
-- [ ] Remove direct OceanSystem dependencies
-- [ ] Keep OceanSystem as thin compatibility layer during transition
+- [x] Make Scene.frag thin wrapper
+- [x] Use RenderPipeline for orchestration
+- [x] Remove direct OceanSystem dependencies
+- [x] Keep OceanSystem as thin compatibility layer during transition
 
 ### Phase 6: Cleanup
 - [ ] Remove OceanSystem.frag (after full migration verified)

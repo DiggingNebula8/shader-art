@@ -22,8 +22,8 @@
 #include "VolumeRaymarching.frag"
 #include "WaveSystem.frag"
 #include "TerrainSystem.frag"
-#include "WaterShading.frag"
-#include "TerrainShading.frag"
+#include "WaterShading.frag"    // Water shading functions and constants
+#include "TerrainShading.frag"  // Terrain shading (defines its own IOR constants to avoid conflicts)
 
 // ============================================================================
 // RENDER CONTEXT STRUCTURES
@@ -55,27 +55,21 @@ struct RenderContext {
 // Uses VolumeRaymarching + TerrainSDF to find floor
 // Uses TerrainShading to shade the floor
 vec3 calculateRefraction(vec3 pos, vec3 normal, vec3 viewDir, RenderContext ctx) {
-    const float AIR_IOR = 1.0;
-    const float WATER_IOR = 1.33;
+    // Use IOR constants from WaterShading (included above)
     float eta = AIR_IOR / WATER_IOR;
     vec3 refractedDir = refractRay(-viewDir, normal, eta);
     
     // Calculate water depth info
     WaterDepthInfo depthInfo = calculateWaterDepthAndColor(pos, normal, viewDir, ctx.terrainParams);
     
-    // Water absorption constants (from WaterShading - included above)
-    // Note: These are available via WaterShading include, but we reference them explicitly here
-    const vec3 waterAbs = vec3(0.15, 0.045, 0.015);
-    const vec3 shallowColor = vec3(0.0, 0.5, 0.75);
-    const vec3 deepColor = vec3(0.0, 0.2, 0.4);
-    
-    vec3 baseAbsorption = exp(-waterAbs * depthInfo.depth);
+    // Note: Water constants (waterAbsorption, shallowWaterColor, deepWaterColor) are defined in Common.frag
+    vec3 baseAbsorption = exp(-waterAbsorption * depthInfo.depth);
     vec3 refractedColor = depthInfo.waterColor * baseAbsorption;
     float translucencyFactor = 1.0 - smoothstep(3.0, 25.0, depthInfo.depth);
     
     if (dot(refractedDir, normal) < 0.0 && translucencyFactor > 0.01) {
         // Use VolumeRaymarching to find floor
-        const float MAX_WATER_DEPTH = 200.0;
+        // MAX_WATER_DEPTH is defined in Common.frag
         VolumeHit hit = raymarchTerrain(pos, refractedDir, MAX_WATER_DEPTH, ctx.time, ctx.terrainParams);
         
         if (hit.hit && hit.valid) {
@@ -97,11 +91,11 @@ vec3 calculateRefraction(vec3 pos, vec3 normal, vec3 viewDir, RenderContext ctx)
             vec3 floorColor = shadeTerrain(terrainParams);
             
             // Apply water absorption
-            vec3 absorption = exp(-waterAbs * hit.distance);
+            vec3 absorption = exp(-waterAbsorption * hit.distance);
             refractedColor = floorColor * absorption;
             
             // Add water tint
-            vec3 waterTint = mix(shallowColor, deepColor, 1.0 - exp(-hit.distance * 0.04));
+            vec3 waterTint = mix(shallowWaterColor, deepWaterColor, 1.0 - exp(-hit.distance * 0.04));
             refractedColor = mix(refractedColor, waterTint, 0.25);
         }
     }

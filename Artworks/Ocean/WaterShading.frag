@@ -23,20 +23,9 @@
 // WATER PROPERTIES
 // ============================================================================
 
-const vec3 waterAbsorption = vec3(0.15, 0.045, 0.015); // m^-1 (realistic values)
-const float baseRoughness = 0.03; // Base roughness for calm water (very smooth)
-const float maxRoughness = 0.12;  // Maximum roughness for choppy water
-const float WATER_IOR = 1.33; // Index of refraction for water
-const float AIR_IOR = 1.0;    // Index of refraction for air
-
-// Water Colors - Realistic ocean colors
-// Shallow: Bright turquoise/cyan (tropical water)
-// Deep: Darker blue but still vibrant (not too dark)
-const vec3 deepWaterColor = vec3(0.0, 0.2, 0.4);   // Darker blue, more vibrant
-const vec3 shallowWaterColor = vec3(0.0, 0.5, 0.75); // Bright turquoise
-
-// Wavelength-dependent Fresnel F0 for water-air interface
-const vec3 WATER_F0 = vec3(0.018, 0.019, 0.020);
+// Note: Water material constants (waterAbsorption, deepWaterColor, shallowWaterColor, 
+//       baseRoughness, maxRoughness, WATER_IOR, AIR_IOR, WATER_F0, MAX_WATER_DEPTH) 
+//       are defined in Common.frag
 
 // ============================================================================
 // FRESNEL FUNCTIONS
@@ -227,18 +216,7 @@ struct WaterDepthInfo {
     vec3 waterColor;
 };
 
-// Calculate refracted ray direction using Snell's law
-vec3 refractRay(vec3 incident, vec3 normal, float eta) {
-    float cosI = -dot(incident, normal);
-    float sinT2 = eta * eta * (1.0 - cosI * cosI);
-    
-    if (sinT2 > 1.0) {
-        return reflect(incident, normal);
-    }
-    
-    float cosT = sqrt(1.0 - sinT2);
-    return eta * incident + (eta * cosI - cosT) * normal;
-}
+// Note: refractRay function is defined in Common.frag
 
 // ============================================================================
 // WATER SHADING PARAMETERS STRUCT
@@ -304,7 +282,7 @@ vec3 calculateRefractedColor(vec3 pos, vec3 normal, vec3 viewDir, WaterDepthInfo
     
     if (dot(refractedDir, normal) < 0.0 && translucencyFactor > 0.01) {
         // Use VolumeRaymarching to find floor for depth-based color
-        const float MAX_WATER_DEPTH = 200.0;
+        // MAX_WATER_DEPTH is defined in Common.frag
         VolumeHit hit = raymarchTerrain(pos, refractedDir, MAX_WATER_DEPTH, time, floorParams);
         
         if (hit.hit && hit.valid) {

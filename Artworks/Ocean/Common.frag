@@ -16,6 +16,21 @@ const float MAX_DIST = 150.0;
 // Physical Constants
 const float GRAVITY = 9.81;
 
+// Index of Refraction Constants
+const float WATER_IOR = 1.33; // Index of refraction for water
+const float AIR_IOR = 1.0;    // Index of refraction for air
+
+// Water Material Constants
+const vec3 waterAbsorption = vec3(0.15, 0.045, 0.015); // m^-1 (realistic absorption coefficients)
+const vec3 deepWaterColor = vec3(0.0, 0.2, 0.4);   // Darker blue for deep water
+const vec3 shallowWaterColor = vec3(0.0, 0.5, 0.75); // Bright turquoise for shallow water
+const float baseRoughness = 0.03; // Base roughness for calm water (very smooth)
+const float maxRoughness = 0.12;  // Maximum roughness for choppy water
+const vec3 WATER_F0 = vec3(0.018, 0.019, 0.020); // Wavelength-dependent Fresnel F0 for water-air interface
+
+// Raymarching Constants
+const float MAX_WATER_DEPTH = 200.0; // Maximum depth for raymarching through water
+
 // log2 implementation (fallback for older GLSL versions)
 float log2_impl(float x) {
     return log(x) / log(2.0);
@@ -72,6 +87,23 @@ float fractalNoise(vec2 p, float scale, int octaves, float persistence, float la
     }
     
     return value / max(maxValue, 1e-6); // Normalize to [0, 1]
+}
+
+// ============================================================================
+// REFRACTION UTILITIES
+// ============================================================================
+
+// Calculate refracted ray direction using Snell's law
+vec3 refractRay(vec3 incident, vec3 normal, float eta) {
+    float cosI = -dot(incident, normal);
+    float sinT2 = eta * eta * (1.0 - cosI * cosI);
+    
+    if (sinT2 > 1.0) {
+        return reflect(incident, normal);
+    }
+    
+    float cosT = sqrt(1.0 - sinT2);
+    return eta * incident + (eta * cosI - cosT) * normal;
 }
 
 #endif // COMMON_FRAG

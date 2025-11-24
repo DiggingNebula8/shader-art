@@ -15,22 +15,7 @@
 #include "TerrainSystem.frag"
 #include "WaveSystem.frag"  // For caustics calculation (uses wave functions)
 
-// Water IOR constants (needed for caustics refraction calculation)
-const float WATER_IOR = 1.33;
-const float AIR_IOR = 1.0;
-
-// Calculate refracted ray direction using Snell's law
-vec3 refractRay(vec3 incident, vec3 normal, float eta) {
-    float cosI = -dot(incident, normal);
-    float sinT2 = eta * eta * (1.0 - cosI * cosI);
-    
-    if (sinT2 > 1.0) {
-        return reflect(incident, normal);
-    }
-    
-    float cosT = sqrt(1.0 - sinT2);
-    return eta * incident + (eta * cosI - cosT) * normal;
-}
+// Note: WATER_IOR, AIR_IOR, and refractRay are defined in Common.frag
 
 // ============================================================================
 // TERRAIN SHADING PARAMETERS STRUCT
