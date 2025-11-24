@@ -1,35 +1,67 @@
-// Common Constants and Utilities
-// Shared across all shader systems
+// ============================================================================
+// COMMON CONSTANTS AND UTILITIES
+// ============================================================================
+// Shared constants and utility functions used across all shader systems
+// ============================================================================
+//
+// CONSTANTS DOCUMENTATION:
+//
+// Mathematical Constants:
+//   - PI: 3.14159265359 - Pi constant
+//   - TAU: 6.28318530718 - 2*PI constant
+//   - EPSILON: 0.0001 - Small epsilon value for floating point comparisons
+//
+// Raymarching Constants:
+//   - MAX_STEPS: 1000 - Maximum iterations for raymarching
+//   - MIN_DIST: 0.001 - Minimum distance threshold for surface intersection
+//   - MAX_DIST: 150.0 - Maximum raymarching distance
+//   - MAX_WATER_DEPTH: 200.0 - Maximum depth for raymarching through water
+//
+// Physical Constants:
+//   - GRAVITY: 9.81 - Gravitational acceleration (m/s^2)
+//
+// Index of Refraction Constants:
+//   - WATER_IOR: 1.33 - Index of refraction for water
+//   - AIR_IOR: 1.0 - Index of refraction for air
+//
+// Water Material Constants:
+//   - waterAbsorption: vec3(0.15, 0.045, 0.015) - Water absorption coefficients (m^-1)
+//   - deepWaterColor: vec3(0.0, 0.2, 0.4) - Color for deep water (darker blue)
+//   - shallowWaterColor: vec3(0.0, 0.5, 0.75) - Color for shallow water (bright turquoise)
+//   - baseRoughness: 0.03 - Base roughness for calm water (very smooth)
+//   - maxRoughness: 0.12 - Maximum roughness for choppy water
+//   - WATER_F0: vec3(0.018, 0.019, 0.020) - Wavelength-dependent Fresnel F0 for water-air interface
+//
+// ============================================================================
 
 #ifndef COMMON_FRAG
 #define COMMON_FRAG
 
+// Mathematical Constants
 const float PI = 3.14159265359;
 const float TAU = 6.28318530718;
 const float EPSILON = 0.0001;
 
-// Raymarching
+// Raymarching Constants
 const int MAX_STEPS = 1000;
-const float MIN_DIST = .001;
+const float MIN_DIST = 0.001;
 const float MAX_DIST = 150.0;
+const float MAX_WATER_DEPTH = 200.0;
 
 // Physical Constants
 const float GRAVITY = 9.81;
 
 // Index of Refraction Constants
-const float WATER_IOR = 1.33; // Index of refraction for water
-const float AIR_IOR = 1.0;    // Index of refraction for air
+const float WATER_IOR = 1.33;
+const float AIR_IOR = 1.0;
 
 // Water Material Constants
-const vec3 waterAbsorption = vec3(0.15, 0.045, 0.015); // m^-1 (realistic absorption coefficients)
-const vec3 deepWaterColor = vec3(0.0, 0.2, 0.4);   // Darker blue for deep water
-const vec3 shallowWaterColor = vec3(0.0, 0.5, 0.75); // Bright turquoise for shallow water
-const float baseRoughness = 0.03; // Base roughness for calm water (very smooth)
-const float maxRoughness = 0.12;  // Maximum roughness for choppy water
-const vec3 WATER_F0 = vec3(0.018, 0.019, 0.020); // Wavelength-dependent Fresnel F0 for water-air interface
-
-// Raymarching Constants
-const float MAX_WATER_DEPTH = 200.0; // Maximum depth for raymarching through water
+const vec3 waterAbsorption = vec3(0.15, 0.045, 0.015);
+const vec3 deepWaterColor = vec3(0.0, 0.2, 0.4);
+const vec3 shallowWaterColor = vec3(0.0, 0.5, 0.75);
+const float baseRoughness = 0.03;
+const float maxRoughness = 0.12;
+const vec3 WATER_F0 = vec3(0.018, 0.019, 0.020);
 
 // log2 implementation (fallback for older GLSL versions)
 float log2_impl(float x) {

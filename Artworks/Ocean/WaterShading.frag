@@ -16,16 +16,13 @@
 #include "Common.frag"
 #include "SkySystem.frag"
 #include "VolumeRaymarching.frag"
-#include "WaveSystem.frag"  // For getWaveHeight, getWaveGradient (used in roughness/reflection)
-#include "TerrainSystem.frag"  // For terrain height calculation (depth)
+#include "WaveSystem.frag"
+#include "TerrainSystem.frag"
 
 // ============================================================================
 // WATER PROPERTIES
 // ============================================================================
 
-// Note: Water material constants (waterAbsorption, deepWaterColor, shallowWaterColor, 
-//       baseRoughness, maxRoughness, WATER_IOR, AIR_IOR, WATER_F0, MAX_WATER_DEPTH) 
-//       are defined in Common.frag
 
 // ============================================================================
 // FRESNEL FUNCTIONS
@@ -216,7 +213,6 @@ struct WaterDepthInfo {
     vec3 waterColor;
 };
 
-// Note: refractRay function is defined in Common.frag
 
 // ============================================================================
 // WATER SHADING PARAMETERS STRUCT
@@ -262,12 +258,6 @@ WaterDepthInfo calculateWaterDepthAndColor(vec3 pos, vec3 normal, vec3 viewDir, 
 // ============================================================================
 // REFRACTION & REFLECTION CALCULATION
 // ============================================================================
-// Note: Refraction uses TerrainShading for floor color (forward declared)
-// This will be resolved when TerrainShading.frag is included
-
-// Calculate refracted color
-// Note: Full implementation with floor shading will be in RenderPipeline
-// This version provides basic refraction without floor visibility
 vec3 calculateRefractedColor(vec3 pos, vec3 normal, vec3 viewDir, WaterDepthInfo depthInfo, float time, TerrainParams floorParams, SkyAtmosphere sky) {
     float eta = AIR_IOR / WATER_IOR;
     vec3 refractedDir = refractRay(-viewDir, normal, eta);
@@ -282,7 +272,6 @@ vec3 calculateRefractedColor(vec3 pos, vec3 normal, vec3 viewDir, WaterDepthInfo
     
     if (dot(refractedDir, normal) < 0.0 && translucencyFactor > 0.01) {
         // Use VolumeRaymarching to find floor for depth-based color
-        // MAX_WATER_DEPTH is defined in Common.frag
         VolumeHit hit = raymarchTerrain(pos, refractedDir, MAX_WATER_DEPTH, time, floorParams);
         
         if (hit.hit && hit.valid) {
@@ -458,8 +447,6 @@ WaterLightingResult calculateWaterLighting(vec3 pos, vec3 normal, vec3 viewDir, 
 // ============================================================================
 // MAIN WATER SHADING FUNCTION
 // ============================================================================
-// Note: This version requires TerrainShading to be included for floor shading
-// A version that accepts a floor color callback will be added later if needed
 
 WaterShadingResult shadeWater(WaterShadingParams params) {
     WaterShadingResult result;

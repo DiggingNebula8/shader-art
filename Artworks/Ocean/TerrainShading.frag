@@ -13,9 +13,7 @@
 #include "Common.frag"
 #include "SkySystem.frag"
 #include "TerrainSystem.frag"
-#include "WaveSystem.frag"  // For caustics calculation (uses wave functions)
-
-// Note: WATER_IOR, AIR_IOR, and refractRay are defined in Common.frag
+#include "WaveSystem.frag"
 
 // ============================================================================
 // TERRAIN SHADING PARAMETERS STRUCT

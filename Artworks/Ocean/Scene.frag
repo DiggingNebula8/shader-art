@@ -5,7 +5,6 @@
 // Handles camera setup, post-processing, and tone mapping
 // ============================================================================
 
-// Include RenderPipeline (which includes all systems)
 #include "Common.frag"
 #include "CameraSystem.frag"
 #include "RenderPipeline.frag"

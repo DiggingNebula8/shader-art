@@ -13,8 +13,8 @@
 #define OCEAN_SYSTEM_FRAG
 
 #include "Common.frag"
-#include "VolumeRaymarching.frag"  // VolumeHit struct and raymarching core
-#include "WaveSystem.frag"  // Wave geometry functions
+#include "VolumeRaymarching.frag"
+#include "WaveSystem.frag"
 #include "SkySystem.frag"
 #include "TerrainSystem.frag"
 
@@ -22,9 +22,6 @@
 // WATER PROPERTIES
 // ============================================================================
 
-// Note: Water material constants (waterAbsorption, deepWaterColor, shallowWaterColor, 
-//       baseRoughness, maxRoughness, WATER_IOR, AIR_IOR, WATER_F0, MAX_WATER_DEPTH) 
-//       are defined in Common.frag
 
 // ============================================================================
 // FRESNEL FUNCTIONS
@@ -169,15 +166,12 @@ vec3 getSubsurfaceScattering(vec3 normal, vec3 viewDir, vec3 lightDir, float dep
 // Raymarch through water to find the ocean floor
 // Compatibility wrapper - uses VolumeRaymarching system via TerrainSystem
 vec3 raymarchThroughWater(vec3 startPos, vec3 rayDir, float time, TerrainParams floorParams) {
-    // MAX_WATER_DEPTH is defined in Common.frag
-    // Use unified raymarching system
     VolumeHit hit = raymarchTerrain(startPos, rayDir, MAX_WATER_DEPTH, time, floorParams);
     
     // Return vec3(hit, distance, 0.0) for backward compatibility
     return vec3(hit.hit ? 1.0 : 0.0, hit.distance, 0.0);
 }
 
-// Note: refractRay function is defined in Common.frag
 
 // Realistic Caustics Calculation
 vec3 calculateCaustics(vec3 floorPos, vec3 waterSurfacePos, vec3 waterNormal, vec3 sunDir, float time, TerrainParams floorParams) {

@@ -22,8 +22,8 @@
 #include "VolumeRaymarching.frag"
 #include "WaveSystem.frag"
 #include "TerrainSystem.frag"
-#include "WaterShading.frag"    // Water shading functions and constants
-#include "TerrainShading.frag"  // Terrain shading (defines its own IOR constants to avoid conflicts)
+#include "WaterShading.frag"
+#include "TerrainShading.frag"
 
 // ============================================================================
 // RENDER CONTEXT STRUCTURES
@@ -55,21 +55,17 @@ struct RenderContext {
 // Uses VolumeRaymarching + TerrainSDF to find floor
 // Uses TerrainShading to shade the floor
 vec3 calculateRefraction(vec3 pos, vec3 normal, vec3 viewDir, RenderContext ctx) {
-    // Use IOR constants from WaterShading (included above)
     float eta = AIR_IOR / WATER_IOR;
     vec3 refractedDir = refractRay(-viewDir, normal, eta);
     
     // Calculate water depth info
     WaterDepthInfo depthInfo = calculateWaterDepthAndColor(pos, normal, viewDir, ctx.terrainParams);
     
-    // Note: Water constants (waterAbsorption, shallowWaterColor, deepWaterColor) are defined in Common.frag
     vec3 baseAbsorption = exp(-waterAbsorption * depthInfo.depth);
     vec3 refractedColor = depthInfo.waterColor * baseAbsorption;
     float translucencyFactor = 1.0 - smoothstep(3.0, 25.0, depthInfo.depth);
     
     if (dot(refractedDir, normal) < 0.0 && translucencyFactor > 0.01) {
-        // Use VolumeRaymarching to find floor
-        // MAX_WATER_DEPTH is defined in Common.frag
         VolumeHit hit = raymarchTerrain(pos, refractedDir, MAX_WATER_DEPTH, ctx.time, ctx.terrainParams);
         
         if (hit.hit && hit.valid) {
