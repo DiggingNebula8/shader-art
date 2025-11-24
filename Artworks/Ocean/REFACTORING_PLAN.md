@@ -61,17 +61,29 @@ Scene.frag (or RenderPipeline.frag)
    - PBR functions (BRDF, subsurface scattering)
    - No dependencies on Terrain/Sky (uses interfaces)
 
+5. **TerrainShading.frag** (extract from OceanSystem)
+   - Terrain material properties
+   - `shadeOceanFloor()` - shades terrain with caustics
+   - Terrain-specific lighting and material functions
+   - Uses TerrainParams for configuration
+
 3. **VolumeRaymarching.frag** (NEW - unified raymarching system)
    - Generic volume raymarching that accepts SDF functions
-   - `raymarchVolume()` - raymarch through any volume with any SDF
-   - `raymarchSurface()` - raymarch to find surface intersections
+   - `raymarchSurfaceCore()` - raymarch to find surface intersections
+   - `raymarchVolumeCore()` - raymarch through volumes (water, clouds, etc.)
    - Main source of truth for all raymarching
-   - Systems provide SDFs, VolumeRaymarching handles algorithm
+   - Systems provide SDFs via macros, VolumeRaymarching handles algorithm
 
-4. **RenderPipeline.frag** (new orchestration layer)
+4. **TerrainShading.frag** (extract from OceanSystem)
+   - Terrain material properties
+   - `shadeTerrain()` - shades terrain with caustics
+   - Terrain-specific lighting and material functions
+   - Uses TerrainParams for configuration
+
+5. **RenderPipeline.frag** (new orchestration layer)
    - Coordinates all systems
    - Defines clear interfaces between systems
-   - Handles integration logic
+   - Handles integration logic (calculateRefraction, calculateReflection, composeFinalColor)
    - Scene.frag becomes thin wrapper
 
 ### Refactored OceanSystem.frag
@@ -92,7 +104,9 @@ Scene.frag (or RenderPipeline.frag)
 - [ ] Design include-based SDF interface (GLSL-compatible)
 - [ ] Implement `raymarchVolume()` - generic volume raymarching algorithm
 - [ ] Implement `raymarchSurface()` - surface intersection algorithm
-- [ ] Move existing raymarching logic from OceanSystem (`raymarchOcean`, `raymarchThroughWater`)
+- [ ] Move existing raymarching logic from OceanSystem:
+  - [ ] `raymarchOcean()` → becomes `raymarchWaveSurface()` wrapper
+  - [ ] `raymarchThroughWater()` → becomes `raymarchTerrain()` wrapper using volume raymarching
 - [ ] Create system-specific raymarch wrappers:
   - [ ] WaveSystem: `raymarchWaveSurface()` - wraps VolumeRaymarching with getWaveSDF
   - [ ] TerrainSystem: `raymarchTerrain()` - wraps VolumeRaymarching with getTerrainSDF
@@ -104,6 +118,9 @@ Scene.frag (or RenderPipeline.frag)
 - [ ] Create `WaterShadingParams` struct for clear interface
 - [ ] Use VolumeRaymarching for refraction calculations
 - [ ] Remove direct Terrain dependencies (use params struct)
+- [ ] Create `TerrainShading.frag`
+- [ ] Move `shadeOceanFloor()` from OceanSystem to TerrainShading
+- [ ] Create `TerrainShadingParams` struct for clear interface
 
 ### Phase 4: Create Render Pipeline
 - [ ] Create `RenderPipeline.frag`
@@ -143,6 +160,24 @@ Scene.frag (or RenderPipeline.frag)
 float getWaveHeight(vec2 pos, float time);
 vec3 getNormal(vec2 pos, float time, out vec2 gradient);
 vec2 getGradient(vec2 pos, float time);
+```
+
+### TerrainShading Interface
+```glsl
+// Terrain material properties
+struct TerrainShadingParams {
+    vec3 pos;                    // Terrain position
+    vec3 normal;                 // Terrain normal
+    vec3 viewDir;                // View direction
+    float time;                  // Time for animation
+    TerrainParams terrainParams; // Terrain configuration
+    LightingInfo light;          // Lighting information (from SkySystem)
+    SkyAtmosphere sky;           // Sky configuration
+    vec3 waterSurfacePos;        // Water surface position (for caustics)
+    vec3 waterNormal;            // Water surface normal (for caustics)
+};
+
+vec3 shadeTerrain(TerrainShadingParams params);
 ```
 
 ### WaterShading Interface
@@ -219,7 +254,7 @@ VolumeHit raymarchSurfaceCore(vec3 start, vec3 dir, float maxDist, float time) {
             hit.distance = t;
             hit.position = pos;
             hit.valid = true;
-            // Normal calculation would go here
+            hit.normal = vec3(0.0, 1.0, 0.0);  // Default - will be calculated by wrapper
             return hit;
         }
         
@@ -243,9 +278,44 @@ VolumeHit raymarchSurfaceCore(vec3 start, vec3 dir, float maxDist, float time) {
 }
 
 // Volume raymarching (for raymarching through volumes, not to surfaces)
+// Used for raymarching through water to find floor, clouds, etc.
 VolumeHit raymarchVolumeCore(vec3 start, vec3 dir, float maxDist, float time) {
-    // Similar algorithm but for volume traversal
-    // Implementation details...
+    float t = 0.0;
+    const float STEP_SIZE = 0.5;  // Fixed step size for volume traversal
+    
+    for (int i = 0; i < 200; i++) {
+        vec3 pos = start + dir * t;
+        float h = getSDF(pos, time);  // System provides this function
+        
+        // Hit found (surface intersection)
+        if (h < MIN_DIST) {
+            VolumeHit hit;
+            hit.hit = true;
+            hit.distance = t;
+            hit.position = pos;
+            hit.valid = true;
+            hit.normal = vec3(0.0, 1.0, 0.0);  // Default - calculated by wrapper
+            return hit;
+        }
+        
+        // Exit conditions
+        if (t > maxDist || h > 50.0) {
+            break;  // Too far or surface too far away
+        }
+        
+        // Adaptive step size
+        float stepSize = clamp(h * 0.3, STEP_SIZE, 2.0);
+        t += stepSize;
+    }
+    
+    // No hit found
+    VolumeHit miss;
+    miss.hit = false;
+    miss.distance = maxDist;
+    miss.position = start + dir * maxDist;
+    miss.valid = true;
+    miss.normal = vec3(0.0);
+    return miss;
 }
 
 #endif
@@ -254,31 +324,47 @@ VolumeHit raymarchVolumeCore(vec3 start, vec3 dir, float maxDist, float time) {
 **System SDF Functions**:
 ```glsl
 // WaveSystem.frag
+#include "VolumeRaymarching.frag"  // Include at file scope for VolumeHit struct
+
 float getWaveSDF(vec3 pos, float time) {
     return pos.y - getWaveHeight(pos.xz, time);
 }
 
 // System-specific raymarch wrapper
 VolumeHit raymarchWaveSurface(vec3 start, vec3 dir, float maxDist, float time) {
+    // Use macro to inject SDF function into core algorithm
     #define getSDF getWaveSDF
-    #include "VolumeRaymarching.frag"
     VolumeHit hit = raymarchSurfaceCore(start, dir, maxDist, time);
     #undef getSDF
+    
+    // Calculate normal using system-specific function
+    if (hit.hit) {
+        vec2 gradient;
+        hit.normal = getNormal(hit.position.xz, time, gradient);
+    }
+    
     return hit;
 }
 
 // TerrainSystem.frag  
+#include "VolumeRaymarching.frag"  // Include at file scope for VolumeHit struct
+
 float getTerrainSDF(vec3 pos, TerrainParams params) {
     return pos.y - getTerrainHeight(pos.xz, params);
 }
 
 // System-specific raymarch wrapper with parameters
 VolumeHit raymarchTerrain(vec3 start, vec3 dir, float maxDist, float time, TerrainParams params) {
-    // Define SDF function that captures params
+    // Define SDF function that captures params via macro
     #define getSDF(pos, t) getTerrainSDF(pos, params)
-    #include "VolumeRaymarching.frag"
     VolumeHit hit = raymarchSurfaceCore(start, dir, maxDist, time);
     #undef getSDF
+    
+    // Calculate normal using system-specific function
+    if (hit.hit) {
+        hit.normal = getTerrainNormal(hit.position, params);
+    }
+    
     return hit;
 }
 ```
@@ -346,9 +432,10 @@ vec3 composeFinalColor(SurfaceHit hit, RenderContext ctx);
 
 **VolumeRaymarching.frag** (Main Raymarching System)
 - Single source of truth for all raymarching algorithms
-- Generic `raymarchVolume()` function accepts any SDF
+- Provides `raymarchSurfaceCore()` and `raymarchVolumeCore()` - generic algorithms
 - Handles all raymarching logic (stepping, convergence, etc.)
 - No knowledge of specific geometry (waves, terrain, etc.)
+- Systems provide SDFs via `#define getSDF` macro before calling core functions
 
 **Geometry Systems** (SDF Providers)
 - **WaveSystem.frag**: `getWaveSDF(vec3 pos, float time)`
@@ -367,26 +454,24 @@ vec3 composeFinalColor(SurfaceHit hit, RenderContext ctx);
 ### Example Usage
 
 ```glsl
+// RenderPipeline.frag
+#include "WaveSystem.frag"
+#include "TerrainSystem.frag"
+
 // Raymarch to water surface
-VolumeHit waterHit = raymarchSurface(
-    camPos, rayDir, MAX_DIST,
-    getWaveSDF,  // SDF function from WaveSystem
-    time, null
-);
+VolumeHit waterHit = raymarchWaveSurface(camPos, rayDir, MAX_DIST, time);
 
 // Raymarch through water to find floor
-VolumeHit floorHit = raymarchVolume(
-    waterPos, refractedDir, MAX_DEPTH,
-    getTerrainSDF,  // SDF function from TerrainSystem
-    time, &terrainParams
-);
+if (waterHit.hit) {
+    vec3 refractedDir = calculateRefractionDir(viewDir, waterHit.normal);
+    VolumeHit floorHit = raymarchTerrain(
+        waterHit.position, refractedDir, MAX_DEPTH, 
+        time, terrainParams
+    );
+}
 
 // Future: Raymarch through clouds
-VolumeHit cloudHit = raymarchVolume(
-    startPos, rayDir, MAX_DIST,
-    getCloudSDF,  // SDF function from CloudSystem
-    time, &cloudParams
-);
+// VolumeHit cloudHit = raymarchClouds(startPos, rayDir, MAX_DIST, time, cloudParams);
 ```
 
 ## Implementation Details
