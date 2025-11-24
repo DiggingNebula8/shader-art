@@ -116,10 +116,11 @@ vec3 shadeTerrain(TerrainShadingParams params) {
     
     float floorHeight = getTerrainHeight(params.pos.xz, params.terrainParams);
     float depthVariation = (floorHeight - params.terrainParams.baseHeight) / max(params.terrainParams.heightVariation, 0.001);
-    vec3 floorColor = mix(params.material.baseColor * 0.7, params.material.baseColor * 1.3, depthVariation * 0.5 + 0.5);
+    float depthT = clamp(depthVariation * 0.5 + 0.5, 0.0, 1.0);
+    vec3 floorColor = mix(params.material.baseColor * 0.7, params.material.baseColor * 1.3, depthT);
     
     // Blend with deep color based on depth
-    floorColor = mix(params.material.deepColor, floorColor, depthVariation * 0.5 + 0.5);
+    floorColor = mix(params.material.deepColor, floorColor, depthT);
     
     float textureNoise = smoothNoise(params.pos.xz * 0.5) * 0.1;
     floorColor += textureNoise;

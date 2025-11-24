@@ -83,6 +83,8 @@ float smoothNoise(vec2 p) {
 
 // Fractal noise (fBm - fractional Brownian motion)
 // Uses fixed loop bound for portability and better compiler optimization
+// Note: octaves parameter is effectively clamped to MAX_FBM_OCTAVES (8).
+// Values above 8 are truncated - only the first 8 octaves will be computed.
 float fractalNoise(vec2 p, float scale, int octaves, float persistence, float lacunarity) {
     if (octaves <= 0) {
         return 0.0;
@@ -109,11 +111,24 @@ float fractalNoise(vec2 p, float scale, int octaves, float persistence, float la
 // ============================================================================
 
 // Calculate refracted ray direction using Snell's law
+// 
+// Parameters:
+//   - incident: Incident ray direction (must be normalized)
+//   - normal: Surface normal (must be normalized)
+//   - eta: Ratio of IORs (n1/n2, where n1 is incident medium, n2 is transmitted medium)
+//
+// Returns:
+//   - Refracted ray direction (normalized), or reflected ray direction if TIR occurs
+//
+// Note: Unlike GLSL's built-in refract(), this function returns the reflected ray
+//       when Total Internal Reflection (TIR) occurs, rather than a zero vector.
+//       This is intentional for water rendering where TIR should reflect the ray.
 vec3 refractRay(vec3 incident, vec3 normal, float eta) {
-    float cosI = -dot(incident, normal);
+    float cosI = clamp(-dot(incident, normal), -1.0, 1.0);
     float sinT2 = eta * eta * (1.0 - cosI * cosI);
     
     if (sinT2 > 1.0) {
+        // Total Internal Reflection (TIR) - return reflected ray
         return reflect(incident, normal);
     }
     

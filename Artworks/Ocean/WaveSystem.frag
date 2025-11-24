@@ -217,6 +217,9 @@ float getWaveSDF(vec3 pos, float time) {
 // Include VolumeRaymarching for VolumeHit struct and core algorithms
 // Note: The core functions use getSDF() which must be defined via macro
 // before calling them. We define it in the wrapper function.
+// VolumeRaymarching.frag has an include guard (#ifndef VOLUME_RAYMARCHING_FRAG)
+// to prevent double-inclusion when both WaveSystem.frag and RenderPipeline.frag
+// are included in the same translation unit.
 #include "VolumeRaymarching.frag"
 
 // System-specific raymarch wrapper for wave surface

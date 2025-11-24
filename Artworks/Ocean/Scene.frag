@@ -89,6 +89,12 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     // waterMaterial = createMurkyWater();
     // waterMaterial = createChoppyWater();
     
+    // Create terrain material (art-directable - can be tweaked without recompilation)
+    TerrainMaterial terrainMaterial = createDefaultTerrainMaterial();
+    // Example: Uncomment to use different terrain presets
+    // terrainMaterial = createSandyTerrainMaterial();
+    // terrainMaterial = createRockyTerrainMaterial();
+    
     // Create render context
     RenderContext ctx;
     ctx.cameraPos = cam.position;
@@ -98,6 +104,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     ctx.terrainParams = terrainParams;
     ctx.camera = cam;
     ctx.waterMaterial = waterMaterial;
+    ctx.terrainMaterial = terrainMaterial;
     
     // Render scene using RenderPipeline
     // Returns both color and hit data (avoids duplicate raymarching)

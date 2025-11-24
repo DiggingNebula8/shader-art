@@ -29,6 +29,15 @@
 // Material type for ocean/water surfaces
 // Used by: WaterShading system
 // ============================================================================
+//
+// PERFORMANCE NOTE:
+//   Material preset functions (createDefaultWaterMaterial(), etc.) are called
+//   per-fragment and reconstruct the struct each time. If profiling reveals
+//   this as a hot path, consider optimizing by:
+//     - Promoting commonly used presets to global const structs
+//     - Driving materials via uniforms (constructed once on CPU/host side)
+//   This is a future optimization knob - not urgent unless profiling shows impact.
+// ============================================================================
 
 struct WaterMaterial {
     vec3 absorption;          // Water absorption coefficients (m^-1) - RGB channels
@@ -80,6 +89,11 @@ WaterMaterial createChoppyWater() {
 // ============================================================================
 // Material type for terrain/floor surfaces
 // Used by: TerrainShading system
+// ============================================================================
+//
+// PERFORMANCE NOTE:
+//   See WATER MATERIAL section above for performance optimization considerations.
+//   Same applies to terrain material presets.
 // ============================================================================
 
 struct TerrainMaterial {
