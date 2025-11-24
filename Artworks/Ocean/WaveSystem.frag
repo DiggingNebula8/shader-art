@@ -156,20 +156,26 @@ vec3 getNormal(vec2 pos, float time, out vec2 gradient) {
     vec2 grad = hg.yz;
     float waveHeight = hg.x;
     
+    // Smoothing parameters
+    const float ROTATION_BASIS = 0.7071; // sqrt(2)/2 for 45° rotation
+    const float SMOOTHING_RADIUS = 0.01;
+    const float SMOOTH_SAMPLE_WEIGHT = 0.15;
+    const float SMOOTH_MIX_FACTOR = 0.2;
+    
     // Temporally stable smoothing using rotated offsets to reduce aliasing
-    float angle = dot(pos, vec2(0.7071, 0.7071)) * 0.5; // Stable rotation
+    float angle = dot(pos, vec2(ROTATION_BASIS, ROTATION_BASIS)) * 0.5; // Stable rotation
     float cosA = cos(angle);
     float sinA = sin(angle);
-    vec2 rotX = vec2(cosA, sinA) * 0.01; // Pre-multiply smoothing radius
-    vec2 rotY = vec2(-sinA, cosA) * 0.01;
+    vec2 rotX = vec2(cosA, sinA) * SMOOTHING_RADIUS; // Pre-multiply smoothing radius
+    vec2 rotY = vec2(-sinA, cosA) * SMOOTHING_RADIUS;
     
     // Optimized: compute smoothing samples efficiently (unrolled for better performance)
     vec2 gradSmooth = grad;
-    gradSmooth += getWaveGradient(pos + rotX, time) * 0.15;
-    gradSmooth += getWaveGradient(pos - rotX, time) * 0.15;
-    gradSmooth += getWaveGradient(pos + rotY, time) * 0.15;
-    gradSmooth += getWaveGradient(pos - rotY, time) * 0.15;
-    grad = mix(grad, gradSmooth / 1.6, 0.2); // Very gentle smoothing
+    gradSmooth += getWaveGradient(pos + rotX, time) * SMOOTH_SAMPLE_WEIGHT;
+    gradSmooth += getWaveGradient(pos - rotX, time) * SMOOTH_SAMPLE_WEIGHT;
+    gradSmooth += getWaveGradient(pos + rotY, time) * SMOOTH_SAMPLE_WEIGHT;
+    gradSmooth += getWaveGradient(pos - rotY, time) * SMOOTH_SAMPLE_WEIGHT;
+    grad = mix(grad, gradSmooth / (1.0 + 4.0 * SMOOTH_SAMPLE_WEIGHT), SMOOTH_MIX_FACTOR); // Very gentle smoothing
     
     gradient = grad;
     
@@ -215,6 +221,12 @@ float getWaveSDF(vec3 pos, float time) {
 
 // System-specific raymarch wrapper for wave surface
 // Uses VolumeRaymarching core algorithm with getWaveSDF
+// 
+// IMPORTANT: Normal and gradient are NOT computed by this function.
+// Callers (specifically RenderPipeline.renderScene()) must recompute them
+// after position stabilization to avoid redundant computation.
+// hit.normal will be placeholder vec3(0.0, 1.0, 0.0) or vec3(0.0)
+// hit.gradient will be vec2(0.0)
 VolumeHit raymarchWaveSurface(vec3 start, vec3 dir, float maxDist, float time) {
     // Define SDF function macro for raymarching algorithm
     #define getSDF(pos, time) getWaveSDF(pos, time)
