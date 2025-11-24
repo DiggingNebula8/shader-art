@@ -280,6 +280,10 @@ float applyValleyNoise(vec2 pos, float baseNoise, float scale, float valleyness)
 }
 
 // Main terrain height function - generates terrain height at position (x, z)
+// Note: For presets using all three scales (large, medium, small), octaves should be >= 3
+// to ensure medium-scale uses at least 2 octaves and small-scale uses at least 1 octave.
+// The code is protected by amplitude guards and fractalNoise's built-in octaves <= 0 check,
+// but defensive guards ensure robustness if presets are modified in the future.
 float getTerrainHeight(vec2 pos, TerrainParams params) {
     // Apply domain warping if enabled
     vec2 warpedPos = (params.domainWarp > MIN_AMPLITUDE_THRESHOLD) 
@@ -298,7 +302,7 @@ float getTerrainHeight(vec2 pos, TerrainParams params) {
     // Medium-scale terrain
     if (params.mediumAmplitude > MIN_AMPLITUDE_THRESHOLD) {
         const vec2 mediumOffset = vec2(100.0, 100.0);
-        float mediumNoise = sampleScaleNoise(warpedPos, params.mediumScale, params.octaves - 1, params.persistence, mediumOffset);
+        float mediumNoise = sampleScaleNoise(warpedPos, params.mediumScale, max(params.octaves - 1, 1), params.persistence, mediumOffset);
         mediumNoise = applyValleyNoise(warpedPos + mediumOffset, mediumNoise, params.mediumScale, params.valleyness);
         heightVariation += (mediumNoise - 0.5) * 2.0 * params.mediumAmplitude;
     }
@@ -306,7 +310,7 @@ float getTerrainHeight(vec2 pos, TerrainParams params) {
     // Small-scale terrain (detail)
     if (params.smallAmplitude > MIN_AMPLITUDE_THRESHOLD) {
         const vec2 smallOffset = vec2(200.0, 200.0);
-        float smallNoise = sampleScaleNoise(warpedPos, params.smallScale, params.octaves - 2, params.persistence, smallOffset);
+        float smallNoise = sampleScaleNoise(warpedPos, params.smallScale, max(params.octaves - 2, 1), params.persistence, smallOffset);
         heightVariation += (smallNoise - 0.5) * 2.0 * params.smallAmplitude;
     }
     
