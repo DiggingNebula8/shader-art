@@ -74,20 +74,9 @@ float waveFreqs[NUM_WAVES] = float[](
 // Time scaling factor to slow down wave motion for more realistic appearance
 const float TIME_SCALE = 0.8; // Slower, more contemplative motion
 
-// Precomputed wave speeds for efficiency (calculated once, used many times)
-const float waveSpeeds[NUM_WAVES] = float[](
-    sqrt(GRAVITY * 0.12) * TIME_SCALE,  // Primary swell
-    sqrt(GRAVITY * 0.20) * TIME_SCALE,  // Secondary swell
-    sqrt(GRAVITY * 0.32) * TIME_SCALE,  // Tertiary swell
-    sqrt(GRAVITY * 0.50) * TIME_SCALE,  // Cross swell
-    sqrt(GRAVITY * 0.85) * TIME_SCALE,  // Detail wave 1
-    sqrt(GRAVITY * 1.4) * TIME_SCALE,   // Detail wave 2
-    sqrt(GRAVITY * 2.2) * TIME_SCALE,   // Detail wave 3
-    sqrt(GRAVITY * 3.5) * TIME_SCALE,   // Detail wave 4
-    sqrt(GRAVITY * 5.5) * TIME_SCALE,   // Detail wave 5
-    sqrt(GRAVITY * 8.5) * TIME_SCALE    // Detail wave 6
-);
-
+// Compute wave speed from wave number using dispersion relation
+// w = sqrt(g*k) for deep water waves, scaled by TIME_SCALE
+// This ensures speeds are always computed from frequencies, preventing drift
 float getWaveSpeed(float k) {
     return sqrt(GRAVITY * k) * TIME_SCALE;
 }
@@ -97,13 +86,13 @@ float getWaveSpeed(float k) {
 // ============================================================================
 
 // Optimized: directly calculate height without full displacement
-// Uses precomputed wave speeds for efficiency
+// Computes wave speeds on-the-fly from frequencies to prevent drift
 float getWaveHeight(vec2 pos, float time) {
     float height = 0.0;
     for (int i = 0; i < NUM_WAVES; i++) {
         vec2 dir = getWaveDir(i);
         float k = waveFreqs[i];
-        float w = waveSpeeds[i]; // Use precomputed speed
+        float w = getWaveSpeed(k); // Compute speed from frequency
         float spatialPhase = dot(pos, dir) * k;
         float temporalPhase = time * w;
         float phase = spatialPhase + temporalPhase;
@@ -123,7 +112,7 @@ vec3 getWaveHeightAndGradient(vec2 pos, float time) {
     for (int i = 0; i < NUM_WAVES; i++) {
         vec2 dir = getWaveDir(i);
         float k = waveFreqs[i];
-        float w = waveSpeeds[i]; // Use precomputed speed
+        float w = getWaveSpeed(k); // Compute speed from frequency
         // Calculate phase with improved precision
         float spatialPhase = dot(pos, dir) * k;
         float temporalPhase = time * w;
@@ -141,13 +130,13 @@ vec3 getWaveHeightAndGradient(vec2 pos, float time) {
 }
 
 // Optimized: return gradient directly without full vec3
-// Uses precomputed wave speeds for efficiency
+// Computes wave speeds on-the-fly from frequencies to prevent drift
 vec2 getWaveGradient(vec2 pos, float time) {
     vec2 grad = vec2(0.0);
     for (int i = 0; i < NUM_WAVES; i++) {
         vec2 dir = getWaveDir(i);
         float k = waveFreqs[i];
-        float w = waveSpeeds[i]; // Use precomputed speed
+        float w = getWaveSpeed(k); // Compute speed from frequency
         float spatialPhase = dot(pos, dir) * k;
         float temporalPhase = time * w;
         float phase = spatialPhase + temporalPhase;
