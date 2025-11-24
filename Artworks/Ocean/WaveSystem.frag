@@ -27,17 +27,22 @@ const vec2 PRIMARY_SWELL_DIR = vec2(0.9578, 0.2873);
 
 // Get wave direction for a given wave index
 // Uses proper angular distribution around primary swell for realistic wave interaction
+// Precomputing wave directions in a constant array.
+const vec2 waveDirs[NUM_WAVES] = vec2[](
+    PRIMARY_SWELL_DIR,
+    normalize(PRIMARY_SWELL_DIR + vec2(0.15, 0.08)),
+    normalize(PRIMARY_SWELL_DIR + vec2(-0.12, 0.15)),
+    normalize(vec2(PRIMARY_SWELL_DIR.y, -PRIMARY_SWELL_DIR.x)),
+    normalize(PRIMARY_SWELL_DIR + vec2(0.08, -0.25)),
+    normalize(PRIMARY_SWELL_DIR + vec2(-0.18, -0.08)),
+    normalize(PRIMARY_SWELL_DIR + vec2(0.25, 0.12)),
+    normalize(PRIMARY_SWELL_DIR + vec2(-0.22, 0.18)),
+    normalize(PRIMARY_SWELL_DIR + vec2(0.12, -0.2)),
+    normalize(PRIMARY_SWELL_DIR + vec2(-0.15, -0.12))
+);
+
 vec2 getWaveDir(int i) {
-    if (i == 0) return PRIMARY_SWELL_DIR;                                    // Primary swell
-    if (i == 1) return normalize(PRIMARY_SWELL_DIR + vec2(0.15, 0.08));      // Secondary swell
-    if (i == 2) return normalize(PRIMARY_SWELL_DIR + vec2(-0.12, 0.15));     // Tertiary swell
-    if (i == 3) return normalize(vec2(PRIMARY_SWELL_DIR.y, -PRIMARY_SWELL_DIR.x)); // Cross swell
-    if (i == 4) return normalize(PRIMARY_SWELL_DIR + vec2(0.08, -0.25));    // Detail wave 1
-    if (i == 5) return normalize(PRIMARY_SWELL_DIR + vec2(-0.18, -0.08));   // Detail wave 2
-    if (i == 6) return normalize(PRIMARY_SWELL_DIR + vec2(0.25, 0.12));     // Detail wave 3
-    if (i == 7) return normalize(PRIMARY_SWELL_DIR + vec2(-0.22, 0.18));   // Detail wave 4
-    if (i == 8) return normalize(PRIMARY_SWELL_DIR + vec2(0.12, -0.2));     // Detail wave 5
-    return normalize(PRIMARY_SWELL_DIR + vec2(-0.15, -0.12));                // Detail wave 6
+    return waveDirs[i];
 }
 
 // Wave amplitudes (m) - follows realistic ocean spectrum (Phillips-like distribution)
