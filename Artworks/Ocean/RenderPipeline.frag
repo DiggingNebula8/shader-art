@@ -1,16 +1,27 @@
 // ============================================================================
-// RENDER PIPELINE
+// RENDER PIPELINE - ORCHESTRATION LAYER
 // ============================================================================
 // High-level orchestration layer that coordinates all rendering systems
-// Provides integration functions and main rendering pipeline
-// ============================================================================
-// This is the main entry point for rendering - coordinates:
-// - WaveSystem (geometry)
-// - TerrainSystem (geometry)
-// - WaterShading (water material)
-// - TerrainShading (terrain material)
-// - SkySystem (atmosphere)
-// - VolumeRaymarching (unified raymarching)
+// 
+// NOTE: This is NOT the shader entry point!
+// The entry point is Scene.frag (which contains mainImage())
+// Scene.frag calls renderScene() from this file
+//
+// Responsibilities:
+//   - Orchestrates all rendering systems
+//   - Provides integration functions (refraction, reflection, composition)
+//   - Coordinates geometry, shading, and lighting systems
+//
+// Systems Coordinated:
+//   - WaveSystem (wave geometry)
+//   - TerrainSystem (terrain geometry)
+//   - WaterShading (water material properties)
+//   - TerrainShading (terrain material properties)
+//   - SkySystem (atmosphere and lighting)
+//   - VolumeRaymarching (unified raymarching algorithm)
+//
+// Main Function:
+//   - renderScene() - Called by Scene.frag to render the entire scene
 // ============================================================================
 
 #ifndef RENDER_PIPELINE_FRAG
@@ -163,6 +174,9 @@ vec3 composeFinalColor(SurfaceHit hit, RenderContext ctx) {
 
 // ============================================================================
 // MAIN RENDERING FUNCTION
+// ============================================================================
+// Called by Scene.frag (the actual shader entry point)
+// Orchestrates all systems to render the complete scene
 // ============================================================================
 
 // Main scene rendering function

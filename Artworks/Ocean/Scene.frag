@@ -1,8 +1,27 @@
 // ============================================================================
-// OCEAN SCENE - Main Rendering Entry Point
+// OCEAN SCENE - SHADER ENTRY POINT
 // ============================================================================
-// Thin wrapper that uses RenderPipeline for orchestration
-// Handles camera setup, post-processing, and tone mapping
+// This is the ACTUAL entry point for the shader (contains mainImage())
+// 
+// Architecture:
+//   Scene.frag (THIS FILE)
+//     ├─ mainImage() - Shader entry point (called by Shadertoy/GLSL runtime)
+//     ├─ Camera setup and configuration
+//     ├─ Calls RenderPipeline.renderScene() - Core rendering logic
+//     └─ Post-processing (fog, exposure, DOF, tone mapping, gamma)
+//
+//   RenderPipeline.frag
+//     ├─ renderScene() - Orchestrates all rendering systems
+//     ├─ calculateRefraction() - Handles water refraction
+//     ├─ calculateReflection() - Handles water reflection
+//     └─ composeFinalColor() - Combines all contributions
+//
+//   Systems (called by RenderPipeline):
+//     ├─ WaveSystem - Wave geometry
+//     ├─ TerrainSystem - Terrain geometry
+//     ├─ WaterShading - Water material properties
+//     ├─ TerrainShading - Terrain material properties
+//     └─ SkySystem - Atmosphere and lighting
 // ============================================================================
 
 #include "Common.frag"
