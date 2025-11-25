@@ -61,6 +61,13 @@ The system follows consistent naming patterns for factory functions:
 - System factory: `createDefault<System>()` or `createDefault<System>Params()`
 - System variants: `create<Variant><System>()`
 
+### Camera Types
+
+- Camera struct: `Camera` (not `CameraMaterial` - cameras are not materials)
+- Camera factory: `createDefaultCamera()`
+- Camera variants: `create<Variant>Camera()` (e.g., `createSunnyDayCamera()`, `createLowLightCamera()`)
+- **Note:** Camera system uses simplified naming without "Material" suffix since cameras are configuration objects, not materials. This is an intentional design choice and is consistent across all camera presets.
+
 ## Extension Patterns
 
 ### 1. Adding a New Material Type
@@ -407,6 +414,32 @@ Some systems include other systems only for type definitions (not function calls
 - Use macros to access functionality instead of direct function calls
 - Consider moving shared types to `Common.frag` if used by multiple unrelated systems
 - Keep type definitions stable (avoid frequent changes)
+
+**Evaluation: Shared Types Header (`Types.frag`)**
+
+**Current State:**
+- Most types are already centralized:
+  - All materials in `MaterialSystem.frag` ✅
+  - Camera in `CameraSystem.frag` ✅
+  - SkyAtmosphere in `SkySystem.frag` ✅
+- Only one type has cross-system dependency:
+  - `TerrainParams` (TerrainSystem) → used by WaterShading (type-only) ✅
+
+**Conclusion:**
+A shared `Types.frag` header is **not needed** at this time because:
+1. **Centralization already exists** - Materials are centralized in MaterialSystem
+2. **Minimal cross-dependencies** - Only one type (`TerrainParams`) has a cross-system dependency
+3. **Well-documented** - The `TerrainParams` dependency is clearly documented and acceptable
+4. **Stable types** - Type definitions don't change frequently, so recompilation cascades are rare
+5. **Overhead vs benefit** - Creating Types.frag would add complexity without significant benefit
+
+**When to Consider Types.frag:**
+- If 3+ types develop cross-system dependencies
+- If types change frequently causing recompilation issues
+- If types are used by many unrelated systems
+- If type definitions become large and impact compile times
+
+**Current Recommendation:** Keep types in their respective systems. The current approach is appropriate for the codebase size and complexity.
 
 ## Integration Examples
 
