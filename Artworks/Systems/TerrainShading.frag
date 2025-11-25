@@ -14,8 +14,16 @@
 #include "MaterialSystem.frag"
 #include "SkySystem.frag"
 #include "TerrainSystem.frag"
-#include "WaveSystem.frag"
 #include "WaterInteractionSystem.frag"
+
+// Wave height/gradient query macros - scenes must define these before including TerrainShading.frag
+// if they want caustics effects. For scenes without water/waves, these default to 0.0/no gradient
+#ifndef TERRAIN_WAVE_HEIGHT
+#define TERRAIN_WAVE_HEIGHT(pos, time) 0.0
+#endif
+#ifndef TERRAIN_WAVE_GRADIENT
+#define TERRAIN_WAVE_GRADIENT(pos, time) vec2(0.0)
+#endif
 
 // ============================================================================
 // TERRAIN SHADING PARAMETERS STRUCT
@@ -78,11 +86,11 @@ vec3 calculateCaustics(vec3 floorPos, vec3 waterSurfacePos, vec3 waterNormal, ve
         vec2 sampleOffset = vec2(cos(angle), sin(angle)) * radius;
         vec2 samplePos = surfacePos + sampleOffset;
         
-        vec2 grad = getWaveGradient(samplePos, time);
+        vec2 grad = TERRAIN_WAVE_GRADIENT(samplePos, time);
         float slope = length(grad);
         float focus = smoothstep(0.2, 0.6, slope);
         
-        float waveHeight = getWaveHeight(samplePos, time);
+        float waveHeight = TERRAIN_WAVE_HEIGHT(samplePos, time);
         float crestFactor = smoothstep(-0.1, 0.2, waveHeight);
         
         float sampleIntensity = focus * (0.7 + crestFactor * 0.3);
@@ -100,7 +108,7 @@ vec3 calculateCaustics(vec3 floorPos, vec3 waterSurfacePos, vec3 waterNormal, ve
     causticsIntensity /= max(totalWeight, 1.0);
     
     // Optimized: reuse wave height calculation for large scale pattern
-    float largeScalePattern = abs(getWaveHeight(surfacePos, time)) * 0.15;
+    float largeScalePattern = abs(TERRAIN_WAVE_HEIGHT(surfacePos, time)) * 0.15;
     causticsIntensity += largeScalePattern * 0.3;
     
     float depthFalloff = exp(-depth * 0.05);

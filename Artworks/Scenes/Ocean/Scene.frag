@@ -180,12 +180,20 @@ float getDepthAlongDirection(vec3 start, vec3 dir, float maxDepth, TerrainParams
     return getDistanceToSurface(start, dir, maxDepth, terrainParams, time);
 }
 
-// Define macro for WaterShading to use (must be defined before including WaterShading.frag)
+// Define macros for WaterShading to use (must be defined before including WaterShading.frag)
 // This macro wraps getSceneSDF with terrainParams for use in sampleTranslucency()
 // Note: getSceneSDF is defined above, so this macro expansion will work correctly
 #define WATER_SHADING_GET_SDF(pos, t, params) getSceneSDF(pos, t, params)
 
-// Now include shading systems (they can use the distance field functions defined above)
+// Define terrain height macro for WaterShading (replaces TerrainSystem dependency)
+#define WATER_TERRAIN_HEIGHT(pos, params) getTerrainHeight(pos, params)
+
+// Define wave macros for TerrainShading (replaces WaveSystem dependency)
+// These enable caustics calculation for underwater terrain
+#define TERRAIN_WAVE_HEIGHT(pos, time) getWaveHeight(pos, time)
+#define TERRAIN_WAVE_GRADIENT(pos, time) getWaveGradient(pos, time)
+
+// Now include shading systems (they can use the distance field functions and macros defined above)
 #include "../../Systems/WaterShading.frag"
 #include "../../Systems/TerrainShading.frag"
 #include "../../Systems/ObjectShading.frag"

@@ -8,11 +8,12 @@
 // ============================================================================
 // Dependencies:
 //   - WaveSystem: For wave height/gradient queries (getWaveHeight, getWaveGradient)
-//   - TerrainSystem: For terrain height queries (getTerrainHeight)
 //   - VolumeRaymarching: For terrain raymarching (raymarchTerrain)
 //   - DistanceFieldSystem: For distance field algorithms and macros
 //     Note: This file uses DISTANCE_FIELD_RAYMARCH macro which requires getSDF(pos, time) macro
 //           to be defined. Scenes should define getSceneSDF() and use it via macro.
+//   - Terrain height queries: Uses macro WATER_TERRAIN_HEIGHT(pos, params) instead of direct include
+//     Scenes must define this macro before including WaterShading.frag
 // ============================================================================
 
 #ifndef WATER_SHADING_FRAG
@@ -23,8 +24,17 @@
 #include "SkySystem.frag"
 #include "VolumeRaymarching.frag"
 #include "WaveSystem.frag"
-#include "TerrainSystem.frag"
 #include "DistanceFieldSystem.frag"
+// Include TerrainSystem only for TerrainParams type definition (not for function calls)
+// Functions are accessed via WATER_TERRAIN_HEIGHT macro instead
+#include "TerrainSystem.frag"
+
+// Terrain height query macro - scenes must define this before including WaterShading.frag
+// Default: returns 0.0 if not defined (for scenes without terrain)
+// Note: Even with TerrainSystem included for types, we use this macro to avoid tight coupling
+#ifndef WATER_TERRAIN_HEIGHT
+#define WATER_TERRAIN_HEIGHT(pos, params) 0.0
+#endif
 
 // Note: sampleTranslucency() uses DISTANCE_FIELD_RAYMARCH macro which requires
 // getSDF(pos, time) macro to be defined. Scenes should define getSceneSDF() and
@@ -283,7 +293,7 @@ WaterDepthInfo calculateWaterDepthAndColor(vec3 pos, vec3 normal, vec3 viewDir, 
     
     // Currently depth uses a simple height-based calculation; distance fields are
     // used for translucency in calculateRefractedColor().
-    float floorHeight = getTerrainHeight(pos.xz, floorParams);
+    float floorHeight = WATER_TERRAIN_HEIGHT(pos.xz, floorParams);
     float heightBasedDepth = max(pos.y - floorHeight, 0.1);
     
     // Use height-based depth as primary (distance field is used for translucency)
@@ -374,7 +384,7 @@ TranslucencyResult sampleTranslucency(vec3 start, vec3 dir, float maxDist, Terra
         vec2 samplePos = surfacePos.xz + offset;
         
         // Get terrain height for color variation
-        float floorHeight = getTerrainHeight(samplePos, terrainParams);
+        float floorHeight = WATER_TERRAIN_HEIGHT(samplePos, terrainParams);
         float depthVariation = (floorHeight - terrainParams.baseHeight) / max(terrainParams.heightVariation, 0.001);
         float depthT = clamp(depthVariation * 0.5 + 0.5, 0.0, 1.0);
         
