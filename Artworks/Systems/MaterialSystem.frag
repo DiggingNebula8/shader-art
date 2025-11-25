@@ -9,7 +9,7 @@
 //
 // Architecture:
 //   MaterialSystem (THIS FILE)
-//     ├─ WaterMaterial - Used for Ocean rendering
+//     ├─ WaterMaterial - Used for water/liquid surface rendering
 //     ├─ TerrainMaterial - Used for terrain/floor rendering
 //     └─ [Future materials can be added here]
 //
@@ -159,10 +159,10 @@ struct ObjectMaterial {
     float specularIntensity; // Specular highlight intensity
 };
 
-// Create default object material (red buoy)
+// Create default object material (neutral gray)
 ObjectMaterial createDefaultObjectMaterial() {
     ObjectMaterial mat;
-    mat.baseColor = vec3(0.8, 0.2, 0.2);  // Red color for buoy
+    mat.baseColor = vec3(0.5, 0.5, 0.5);  // Neutral gray color
     mat.roughness = 0.3;                   // Moderately smooth
     mat.metallic = 0.0;                    // Non-metallic
     mat.specularIntensity = 0.5;           // Moderate specular

@@ -32,12 +32,24 @@
 // RENDER CONTEXT STRUCTURES
 // ============================================================================
 
-// Surface type constants (generic - can be extended by scenes)
-const int SURFACE_WATER = 0;
-const int SURFACE_TERRAIN = 1;
-const int SURFACE_OBJECT = 2;
-const int SURFACE_UNDERWATER_TERRAIN = 3;  // Terrain below water surface
-const int SURFACE_UNDERWATER_OBJECT = 4;   // Object below water surface
+// Generic surface type constants (scenes can extend with their own types)
+// Base types that work for any scene:
+const int SURFACE_PRIMARY = 0;    // Main surface (water, ground, floor, etc.)
+const int SURFACE_SECONDARY = 1;  // Secondary surface (terrain, floor, etc.)
+const int SURFACE_OBJECT = 2;     // Interactive objects
+const int SURFACE_VOLUME = 3;     // Volumetric surfaces
+
+// Scene extension base - scenes can define additional types starting from here
+// Example: const int SURFACE_UNDERWATER_TERRAIN = SURFACE_SCENE_EXTENSION_BASE + 0;  // Ocean-specific
+const int SURFACE_SCENE_EXTENSION_BASE = 4;
+
+// Backward compatibility: Map old Ocean-specific names to generic types
+// (Scenes can override these by defining them before including RenderPipeline)
+// Note: In GLSL, redefining a const int with the same value is allowed, but different values will cause an error
+const int SURFACE_WATER = SURFACE_PRIMARY;
+const int SURFACE_TERRAIN = SURFACE_SECONDARY;
+// Note: SURFACE_UNDERWATER_TERRAIN and SURFACE_UNDERWATER_OBJECT should be defined by scenes that need them
+// They are not defined here as defaults to avoid forcing underwater types on scenes that don't need them
 
 struct SurfaceHit {
     bool hit;
@@ -45,7 +57,7 @@ struct SurfaceHit {
     vec3 normal;
     vec2 gradient;
     float distance;
-    int surfaceType;  // SURFACE_WATER, SURFACE_TERRAIN, etc.
+    int surfaceType;  // SURFACE_PRIMARY, SURFACE_SECONDARY, SURFACE_OBJECT, SURFACE_VOLUME, or scene-specific extensions
     // Optional water surface information (for terrain caustics and wet surfaces)
     // Scenes should set these when rendering terrain/objects that may have water above them
     vec3 waterSurfacePos;  // Water surface position (default: position if no water)
@@ -92,8 +104,35 @@ vec3 composeFinalColor(SurfaceHit hit, RenderContext ctx) {
     LightingInfo light = evaluateLighting(ctx.sky, ctx.time);
     vec3 viewDir = -ctx.rayDir;
     
-    if (hit.surfaceType == SURFACE_WATER) {
-        // Water surface
+    // Map surface types to shading systems
+    // Generic types: SURFACE_PRIMARY, SURFACE_SECONDARY, SURFACE_OBJECT, SURFACE_VOLUME
+    // Scene-specific extensions (>= SURFACE_SCENE_EXTENSION_BASE) are handled generically:
+    //   - Even offsets from SURFACE_SCENE_EXTENSION_BASE map to terrain shading
+    //   - Odd offsets from SURFACE_SCENE_EXTENSION_BASE map to object shading
+    //   This convention allows scenes to define extensions without modifying RenderPipeline
+    
+    // Helper: Check if surface type uses terrain shading
+    // Includes SURFACE_SECONDARY and even-numbered scene extensions (e.g., SURFACE_UNDERWATER_TERRAIN = 4)
+    bool usesTerrainShading = (hit.surfaceType == SURFACE_SECONDARY || hit.surfaceType == SURFACE_TERRAIN);
+    if (hit.surfaceType >= SURFACE_SCENE_EXTENSION_BASE) {
+        int extensionOffset = hit.surfaceType - SURFACE_SCENE_EXTENSION_BASE;
+        if (extensionOffset % 2 == 0) {  // Even offset = terrain variant
+            usesTerrainShading = true;
+        }
+    }
+    
+    // Helper: Check if surface type uses object shading  
+    // Includes SURFACE_OBJECT and odd-numbered scene extensions (e.g., SURFACE_UNDERWATER_OBJECT = 5)
+    bool usesObjectShading = (hit.surfaceType == SURFACE_OBJECT);
+    if (hit.surfaceType >= SURFACE_SCENE_EXTENSION_BASE) {
+        int extensionOffset = hit.surfaceType - SURFACE_SCENE_EXTENSION_BASE;
+        if (extensionOffset % 2 == 1) {  // Odd offset = object variant
+            usesObjectShading = true;
+        }
+    }
+    
+    if (hit.surfaceType == SURFACE_PRIMARY || hit.surfaceType == SURFACE_WATER) {
+        // Primary surface (typically water for Ocean scene, but can be any main surface)
         // Prepare WaterShading parameters
         WaterShadingParams waterParams;
         waterParams.pos = hit.position;
@@ -110,8 +149,9 @@ vec3 composeFinalColor(SurfaceHit hit, RenderContext ctx) {
         WaterShadingResult waterResult = shadeWater(waterParams);
         
         return waterResult.color;
-    } else if (hit.surfaceType == SURFACE_TERRAIN || hit.surfaceType == SURFACE_UNDERWATER_TERRAIN) {
-        // Terrain surface (above-water or underwater)
+    } else if (usesTerrainShading) {
+        // Secondary surface (typically terrain for Ocean scene, but can be any secondary surface)
+        // Also handles scene-specific extensions that map to terrain (e.g., underwater terrain)
         TerrainShadingParams terrainParams;
         terrainParams.pos = hit.position;
         terrainParams.normal = hit.normal;
@@ -134,7 +174,7 @@ vec3 composeFinalColor(SurfaceHit hit, RenderContext ctx) {
         
         // TerrainShading system handles its own water interactions internally
         return shadeTerrain(terrainParams);
-    } else if (hit.surfaceType == SURFACE_OBJECT || hit.surfaceType == SURFACE_UNDERWATER_OBJECT) {
+    } else if (usesObjectShading) {
         // Object surface (above-water or underwater)
         // Prepare ObjectShading parameters
         ObjectShadingParams objectParams;

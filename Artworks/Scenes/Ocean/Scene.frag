@@ -193,12 +193,21 @@ float getDepthAlongDirection(vec3 start, vec3 dir, float maxDepth, TerrainParams
 #include "../../Systems/RenderPipeline.frag"
 
 // ============================================================================
+// OCEAN SCENE-SPECIFIC SURFACE TYPES
+// ============================================================================
+// Ocean scene extends generic surface types with underwater variants
+// Generic types from RenderPipeline: SURFACE_PRIMARY (water), SURFACE_SECONDARY (terrain), SURFACE_OBJECT
+// Ocean-specific extensions (defined after RenderPipeline to use SURFACE_SCENE_EXTENSION_BASE):
+const int SURFACE_UNDERWATER_TERRAIN = SURFACE_SCENE_EXTENSION_BASE + 0;  // Terrain below water surface
+const int SURFACE_UNDERWATER_OBJECT = SURFACE_SCENE_EXTENSION_BASE + 1;   // Object below water surface
+
+// ============================================================================
 // OCEAN SCENE RENDERING FUNCTION
 // ============================================================================
 // Ocean-specific rendering logic that orchestrates all systems
 // This replaces the generic renderScene() from RenderPipeline for Ocean scene
-// Note: Surface type constants (SURFACE_WATER, SURFACE_TERRAIN, SURFACE_OBJECT)
-//       are defined in RenderPipeline.frag and available here via include
+// Note: Generic surface types are defined in RenderPipeline.frag
+//       Ocean-specific underwater types are defined above
 // ============================================================================
 
 // Ocean scene rendering function
@@ -355,7 +364,7 @@ RenderResult renderOceanScene(RenderContext ctx) {
         surfaceHit.distance = MAX_DIST;
         surfaceHit.normal = vec3(0.0);
         surfaceHit.gradient = vec2(0.0);
-        surfaceHit.surfaceType = SURFACE_WATER; // Default, won't be used
+        surfaceHit.surfaceType = SURFACE_PRIMARY; // Default, won't be used
         surfaceHit.waterSurfacePos = vec3(0.0);
         surfaceHit.waterNormal = vec3(0.0, 1.0, 0.0);
         surfaceHit.waterDepth = 0.0;
