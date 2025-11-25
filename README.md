@@ -213,14 +213,13 @@ shader-art/
 │   │   │   └── Scene.frag
 │   │   └── CREATING_A_NEW_SCENE.md
 │   │
-│   └── *.frag               # Standalone artworks
+│   └── *.frag               # Standalone artworks (Will be moved elsewhere)
 │       ├── CelluarAutomata.frag
 │       ├── Propeller.frag
 │       └── Spyral.frag
 │
 ├── init.frag                # Default shader template
 ├── RaymarchingBase.frag     # Base raymarching utilities
-├── SYSTEM_REVIEW.md         # System review documentation
 ├── README.md                # This file
 └── LICENSE                  # MIT License
 ```
@@ -267,6 +266,30 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Acknowledgments
 
-- Tessendorf's "Simulating Ocean Water" (SIGGRAPH 2001) - Wave system inspiration
-- Perlin & Hoffert "Hypertexture" (SIGGRAPH 1989) - Terrain noise techniques
-- Musgrave et al. "Eroded Fractal Terrains" (SIGGRAPH 1989) - Terrain erosion
+This project builds upon research and techniques from the following papers and resources:
+
+### Wave System
+- Tessendorf, J. "Simulating Ocean Water" (SIGGRAPH 2001) - Wave spectrum and ocean simulation techniques
+
+### Terrain System
+- Perlin, K. & Hoffert, E. M. "Hypertexture" (SIGGRAPH 1989) - Procedural noise and texture techniques
+- Musgrave, F. K., Kolb, C. E., & Mace, R. S. "The Synthesis and Rendering of Eroded Fractal Terrains" (SIGGRAPH 1989) - Ridged multifractal noise and terrain erosion
+- Ebert, D. S., Musgrave, F. K., Peachey, D., Perlin, K., & Worley, S. "Texturing & Modeling: A Procedural Approach" - Procedural terrain generation techniques
+- Domain Warping techniques - Natural-looking terrain feature generation
+
+### Sky & Atmosphere System
+- Preetham, A. J., Shirley, P., & Smits, B. "A Practical Analytic Model for Daylight" - Physically-based sky and atmospheric scattering model
+- Rayleigh/Mie scattering theory - Atmospheric light scattering
+- Henyey-Greenstein phase function - Forward scattering approximation for fog and atmospheric effects
+- Beer-Lambert law - Light transmittance through participating media
+- Unreal Engine 4/5 Exponential Height Fog - Volumetric fog rendering techniques
+
+### Water Shading System
+- Filament PBR Engine - Physically-based rendering techniques
+- Unreal Engine 4/5 Water Shading - Water surface rendering and material properties
+- Jensen, H. W., Marschner, S. R., Levoy, M., & Hanrahan, P. "A Practical Model for Subsurface Light Transport" - Subsurface scattering in water
+- "Multiple-Scattering Microfacet BSDFs with the Smith Model" - Microfacet-based specular reflection
+
+### Raymarching System
+- Hart, J. C. "Sphere Tracing: A Geometric Method for the Antialiased Ray Tracing of Implicit Surfaces" (1996) - Distance field raymarching algorithm
+- Distance Field Raymarching techniques - Efficient surface intersection algorithms
