@@ -424,7 +424,7 @@ TranslucencyResult sampleTranslucency(vec3 start, vec3 dir, float maxDist, Terra
         float depthT = clamp(depthVariation * 0.5 + 0.5, 0.0, 1.0);
         
         // Approximate terrain color (matches TerrainShading logic)
-        vec3 sampleColor = vec3(0.2, 0.25, 0.3); // Base ocean floor color
+        vec3 sampleColor = vec3(0.2, 0.25, 0.3); // Base terrain color
         sampleColor = mix(sampleColor * 0.7, sampleColor * 1.3, depthT);
         
         // Add texture variation with smooth noise

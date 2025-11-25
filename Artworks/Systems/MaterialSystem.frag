@@ -26,7 +26,7 @@
 // ============================================================================
 // WATER MATERIAL
 // ============================================================================
-// Material type for ocean/water surfaces
+// Material type for water/liquid surfaces
 // Used by: WaterShading system
 // ============================================================================
 //
@@ -50,7 +50,7 @@ struct WaterMaterial {
     float foamThreshold;     // Wave height threshold for foam generation
 };
 
-// Create default water material instance (realistic ocean water)
+// Create default water material instance (realistic water)
 WaterMaterial createDefaultWaterMaterial() {
     WaterMaterial mat;
     mat.absorption = vec3(0.15, 0.045, 0.015);  // Realistic absorption (red absorbed most)

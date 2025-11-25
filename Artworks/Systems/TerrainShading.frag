@@ -27,7 +27,7 @@
 //     - Scenes WITH water: Define both macros to enable caustics
 //     - Scenes WITHOUT water: Omit macros (defaults will disable caustics)
 //
-// This system shades terrain surfaces, especially ocean floor with caustics
+// This system shades terrain surfaces, especially underwater terrain with caustics
 // ============================================================================
 
 #ifndef TERRAIN_SHADING_FRAG
@@ -183,7 +183,7 @@ vec3 calculateCaustics(vec3 floorPos, vec3 waterSurfacePos, vec3 waterNormal, ve
 // TERRAIN SHADING
 // ============================================================================
 
-// Shade the ocean floor with caustics
+// Shade terrain surfaces with caustics (for underwater scenes)
 vec3 shadeTerrain(TerrainShadingParams params) {
     vec3 sunDir = params.light.sunDirection;
     vec3 sunColor = params.light.sunColor;
