@@ -21,7 +21,7 @@
 #ifndef MATERIAL_SYSTEM_FRAG
 #define MATERIAL_SYSTEM_FRAG
 
-#include "Common.frag"
+#include "../CoreSystems/Common.frag"
 
 // ============================================================================
 // WATER MATERIAL

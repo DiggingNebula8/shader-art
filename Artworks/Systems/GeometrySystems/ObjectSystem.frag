@@ -8,8 +8,8 @@
 #ifndef OBJECT_SYSTEM_FRAG
 #define OBJECT_SYSTEM_FRAG
 
-#include "Common.frag"
-#include "VolumeRaymarching.frag"
+#include "../CoreSystems/Common.frag"
+#include "../CoreSystems/VolumeRaymarching.frag"
 
 // ============================================================================
 // SDF PRIMITIVES

@@ -33,10 +33,10 @@
 #ifndef TERRAIN_SHADING_FRAG
 #define TERRAIN_SHADING_FRAG
 
-#include "Common.frag"
+#include "../CoreSystems/Common.frag"
 #include "MaterialSystem.frag"
-#include "SkySystem.frag"
-#include "TerrainSystem.frag"
+#include "../CoreSystems/SkySystem.frag"
+#include "../GeometrySystems/TerrainSystem.frag"
 #include "WaterInteractionSystem.frag"
 
 // Wave height/gradient query macros - optional, default to 0.0 for scenes without water

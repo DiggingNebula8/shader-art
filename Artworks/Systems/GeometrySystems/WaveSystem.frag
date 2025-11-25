@@ -13,7 +13,7 @@
 #ifndef WAVE_SYSTEM_FRAG
 #define WAVE_SYSTEM_FRAG
 
-#include "Common.frag"
+#include "../CoreSystems/Common.frag"
 
 // ============================================================================
 // WAVE PARAMETERS
@@ -222,7 +222,7 @@ float getWaveSDF(vec3 pos, float time) {
 // VolumeRaymarching.frag has an include guard (#ifndef VOLUME_RAYMARCHING_FRAG)
 // to prevent double-inclusion when both WaveSystem.frag and RenderPipeline.frag
 // are included in the same translation unit.
-#include "VolumeRaymarching.frag"
+#include "../CoreSystems/VolumeRaymarching.frag"
 
 // System-specific raymarch wrapper for wave surface
 // Uses VolumeRaymarching core algorithm with getWaveSDF

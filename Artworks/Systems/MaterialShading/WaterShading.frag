@@ -41,15 +41,15 @@
 #ifndef WATER_SHADING_FRAG
 #define WATER_SHADING_FRAG
 
-#include "Common.frag"
+#include "../CoreSystems/Common.frag"
 #include "MaterialSystem.frag"
-#include "SkySystem.frag"
-#include "VolumeRaymarching.frag"
-#include "WaveSystem.frag"
-#include "DistanceFieldSystem.frag"
+#include "../CoreSystems/SkySystem.frag"
+#include "../CoreSystems/VolumeRaymarching.frag"
+#include "../GeometrySystems/WaveSystem.frag"
+#include "../CoreSystems/DistanceFieldSystem.frag"
 // Include TerrainSystem only for TerrainParams type definition (not for function calls)
 // Functions are accessed via WATER_TERRAIN_HEIGHT macro instead
-#include "TerrainSystem.frag"
+#include "../GeometrySystems/TerrainSystem.frag"
 
 // Terrain height query macro - optional, defaults to 0.0 for scenes without terrain
 #ifndef WATER_TERRAIN_HEIGHT

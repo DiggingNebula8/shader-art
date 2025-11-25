@@ -22,14 +22,14 @@
 //     └─ SkySystem - Atmosphere and lighting
 // ============================================================================
 
-#include "../../Systems/Common.frag"
-#include "../../Systems/MaterialSystem.frag"
-#include "../../Systems/CameraSystem.frag"
-#include "../../Systems/WaveSystem.frag"
-#include "../../Systems/TerrainSystem.frag"
-#include "../../Systems/ObjectSystem.frag"
-#include "../../Systems/DistanceFieldSystem.frag"
-#include "../../Systems/VolumeRaymarching.frag"
+#include "../../Systems/CoreSystems/Common.frag"
+#include "../../Systems/MaterialShading/MaterialSystem.frag"
+#include "../../Systems/CoreSystems/CameraSystem.frag"
+#include "../../Systems/GeometrySystems/WaveSystem.frag"
+#include "../../Systems/GeometrySystems/TerrainSystem.frag"
+#include "../../Systems/GeometrySystems/ObjectSystem.frag"
+#include "../../Systems/CoreSystems/DistanceFieldSystem.frag"
+#include "../../Systems/CoreSystems/VolumeRaymarching.frag"
 
 // ============================================================================
 // OCEAN SCENE-SPECIFIC DEFINITIONS
@@ -202,11 +202,11 @@ float getDepthAlongDirection(vec3 start, vec3 dir, float maxDepth, TerrainParams
 #define TERRAIN_WAVE_GRADIENT(pos, time) getWaveGradient(pos, time)
 
 // Now include shading systems (they can use the distance field functions and macros defined above)
-#include "../../Systems/WaterShading.frag"
-#include "../../Systems/TerrainShading.frag"
-#include "../../Systems/ObjectShading.frag"
-#include "../../Systems/SkySystem.frag"
-#include "../../Systems/RenderPipeline.frag"
+#include "../../Systems/MaterialShading/WaterShading.frag"
+#include "../../Systems/MaterialShading/TerrainShading.frag"
+#include "../../Systems/MaterialShading/ObjectShading.frag"
+#include "../../Systems/CoreSystems/SkySystem.frag"
+#include "../../Systems/Pipeline/RenderPipeline.frag"
 
 // ============================================================================
 // OCEAN SCENE-SPECIFIC SURFACE TYPES

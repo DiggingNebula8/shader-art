@@ -18,9 +18,9 @@
 #ifndef WATER_INTERACTION_SYSTEM_FRAG
 #define WATER_INTERACTION_SYSTEM_FRAG
 
-#include "Common.frag"
+#include "../CoreSystems/Common.frag"
 #include "MaterialSystem.frag"
-#include "SkySystem.frag"
+#include "../CoreSystems/SkySystem.frag"
 
 // ============================================================================
 // WATER INTERACTION PARAMETERS

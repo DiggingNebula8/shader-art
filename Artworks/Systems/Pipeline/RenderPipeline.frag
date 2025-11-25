@@ -20,13 +20,13 @@
 #ifndef RENDER_PIPELINE_FRAG
 #define RENDER_PIPELINE_FRAG
 
-#include "Common.frag"
-#include "MaterialSystem.frag"
-#include "CameraSystem.frag"
-#include "SkySystem.frag"
-#include "WaterShading.frag"
-#include "TerrainShading.frag"
-#include "ObjectShading.frag"
+#include "../CoreSystems/Common.frag"
+#include "../MaterialShading/MaterialSystem.frag"
+#include "../CoreSystems/CameraSystem.frag"
+#include "../CoreSystems/SkySystem.frag"
+#include "../MaterialShading/WaterShading.frag"
+#include "../MaterialShading/TerrainShading.frag"
+#include "../MaterialShading/ObjectShading.frag"
 
 // ============================================================================
 // RENDER CONTEXT STRUCTURES

@@ -12,7 +12,7 @@
 #ifndef TERRAIN_SYSTEM_FRAG
 #define TERRAIN_SYSTEM_FRAG
 
-#include "Common.frag"
+#include "../CoreSystems/Common.frag"
 
 // ============================================================================
 // CONSTANTS
@@ -368,7 +368,7 @@ float getTerrainSDF(vec3 pos, TerrainParams params) {
 // ============================================================================
 
 // Include VolumeRaymarching for VolumeHit struct and core algorithms
-#include "VolumeRaymarching.frag"
+#include "../CoreSystems/VolumeRaymarching.frag"
 
 // System-specific raymarch wrapper for terrain surface
 // Uses VolumeRaymarching core algorithm with getTerrainSDF

@@ -8,9 +8,9 @@
 #ifndef OBJECT_SHADING_FRAG
 #define OBJECT_SHADING_FRAG
 
-#include "Common.frag"
+#include "../CoreSystems/Common.frag"
 #include "MaterialSystem.frag"
-#include "SkySystem.frag"
+#include "../CoreSystems/SkySystem.frag"
 #include "WaterInteractionSystem.frag"
 
 // ============================================================================
