@@ -82,6 +82,7 @@ struct FogConfig {
     float fogHeightFalloff; // Fog height falloff rate
     float fogDistanceFalloff; // Fog distance falloff (0 = constant, higher = more fog at distance)
     float fogHorizonBoost;   // Additional fog density boost at horizon (0-1)
+    float fogBaseHeight;     // Reference height for height fog (typically ground level)
     vec3 fogColor;          // Base fog color
 };
 
@@ -165,6 +166,7 @@ SkyAtmosphere createDefaultSky() {
     sky.fog.fogHeightFalloff = 8.0;    // Increased further for very smooth height transition
     sky.fog.fogDistanceFalloff = 0.0008; // Distance-based density increase (more fog at horizon)
     sky.fog.fogHorizonBoost = 0.3;      // Additional density boost at horizon (30%)
+    sky.fog.fogBaseHeight = 0.0;        // Reference height for height fog (ground level)
     sky.fog.fogColor = vec3(0.5, 0.6, 0.7);
     
     // Advanced
@@ -678,12 +680,9 @@ vec3 skyColor(vec3 dir, SkyAtmosphere sky, float time) {
 float calculateFogDensity(vec3 worldPos, vec3 camPos, SkyAtmosphere sky) {
     if (!sky.fog.enableFog) return 0.0;
     
-    // Reference height (typically ground level)
-    const float FOG_HEIGHT = 0.0;
-    
-    // Height above reference plane
+    // Height above reference plane (configurable via fogBaseHeight)
     // Use smooth transition to avoid discontinuities
-    float height = worldPos.y - FOG_HEIGHT;
+    float height = worldPos.y - sky.fog.fogBaseHeight;
     
     // Exponential height fog density
     // Density decreases exponentially as height increases
@@ -710,8 +709,12 @@ float calculateFogTransmittance(vec3 startPos, vec3 endPos, vec3 camPos, SkyAtmo
     vec3 rayDir = normalize(endPos - startPos);
     float rayLength = length(endPos - startPos);
     
-    // Adaptive sampling: more samples for longer rays
-    int numSamples = 8;
+    // Adaptive sampling: more samples for longer rays and denser fog
+    // Derive sample count from ray length and fog density, clamped to reasonable range
+    const int MIN_SAMPLES = 4;
+    const int MAX_SAMPLES = 16;
+    float densityFactor = sky.fog.fogDensity * 100.0; // Scale density for sample calculation
+    int numSamples = int(clamp(4.0 + rayLength * 0.5 + densityFactor * 2.0, float(MIN_SAMPLES), float(MAX_SAMPLES)));
     
     float stepSize = rayLength / float(numSamples);
     

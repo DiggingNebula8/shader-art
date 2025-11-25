@@ -400,7 +400,10 @@ TranslucencyResult sampleTranslucency(vec3 start, vec3 dir, float maxDist, Terra
     result.transmittance = exp(-absorptionCoeff * surfaceDist);
     
     // Get surface position with slight offset to ensure we're on the surface
-    vec3 surfacePos = start + dir * surfaceDist;
+    // Offset slightly back along the ray to avoid self-intersections and ensure
+    // we're safely inside water/at the interface
+    const float SURFACE_EPS = 0.002;
+    vec3 surfacePos = start + dir * max(surfaceDist - SURFACE_EPS, 0.0);
     
     // Sample multiple points around the hit for smoother color (reduces banding)
     vec3 floorColorSum = vec3(0.0);
@@ -715,7 +718,7 @@ struct WaterLightingResult {
 };
 
 WaterLightingResult calculateWaterLighting(vec3 pos, vec3 normal, vec3 viewDir, vec3 refractedColor, vec3 reflectedColor, 
-                                          WaterDepthInfo depthInfo, float time, vec2 gradient, SkyAtmosphere sky, LightingInfo light, float dynamicRoughness, WaterMaterial material) {
+                                          WaterDepthInfo depthInfo, float time, vec2 gradient, SkyAtmosphere sky, LightingInfo light, float dynamicRoughness, WaterMaterial material, float waveHeight) {
     WaterLightingResult result;
     
     result.dynamicRoughness = dynamicRoughness;
@@ -814,8 +817,7 @@ WaterLightingResult calculateWaterLighting(vec3 pos, vec3 normal, vec3 viewDir, 
     // Note: Pass raw sunColor (not lightColor) since calculateSunGlints multiplies by sunIntensity internally
     vec3 sunGlints = calculateSunGlints(normal, viewDir, lightDir, light.sunColor, light.sunIntensity, result.dynamicRoughness, time, pos.xz);
     
-    // Calculate and add foam
-    float waveHeight = getWaveHeight(pos.xz, time);
+    // Calculate and add foam (using precomputed waveHeight)
     float foamIntensity = calculateFoamIntensity(pos.xz, gradient, waveHeight, time, material);
     vec3 foam = material.foamColor * foamIntensity;
     
@@ -860,10 +862,10 @@ WaterShadingResult shadeWater(WaterShadingParams params) {
     // Calculate reflected color (pass precomputed roughness)
     vec3 reflectedColor = calculateReflectedColor(params.pos, params.normal, params.viewDir, params.time, params.gradient, params.sky, dynamicRoughness, params.material);
     
-    // Calculate final lighting (pass precomputed roughness)
+    // Calculate final lighting (pass precomputed roughness and waveHeight)
     // Note: calculateWaterLighting now handles foam and sun glints internally
     WaterLightingResult lighting = calculateWaterLighting(params.pos, params.normal, params.viewDir, refractedColor, reflectedColor, 
-                                                          depthInfo, params.time, params.gradient, params.sky, params.light, dynamicRoughness, params.material);
+                                                          depthInfo, params.time, params.gradient, params.sky, params.light, dynamicRoughness, params.material, waveHeight);
     
     result.color = lighting.color;
     result.dynamicRoughness = lighting.dynamicRoughness;

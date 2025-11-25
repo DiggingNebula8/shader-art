@@ -212,10 +212,18 @@ float getDepthAlongDirection(vec3 start, vec3 dir, float maxDepth, TerrainParams
 // OCEAN SCENE-SPECIFIC SURFACE TYPES
 // ============================================================================
 // Ocean scene extends generic surface types with underwater variants
-// Generic types from RenderPipeline: SURFACE_PRIMARY (water), SURFACE_SECONDARY (terrain), SURFACE_OBJECT
+// 
+// Generic surface type mappings for Ocean scene:
+//   SURFACE_PRIMARY = water surface
+//   SURFACE_SECONDARY = terrain surface
+//   SURFACE_OBJECT = object surface
+//
 // Ocean-specific extensions using helper macros from RenderPipeline:
 const int SURFACE_UNDERWATER_TERRAIN = SURFACE_SCENE_EXTENSION_BASE + SURFACE_TERRAIN_TYPE(0);  // Terrain below water surface
 const int SURFACE_UNDERWATER_OBJECT = SURFACE_SCENE_EXTENSION_BASE + SURFACE_OBJECT_TYPE(0);    // Object below water surface
+
+// Wet surface detection threshold (units from water surface)
+const float WET_SURFACE_THRESHOLD = 1.5;
 
 // ============================================================================
 // OCEAN SCENE RENDERING FUNCTION
@@ -260,7 +268,7 @@ RenderResult renderOceanScene(RenderContext ctx) {
     // Determine which surface was hit first (closest)
     // Check all hits and find the closest valid one
     float closestDist = MAX_DIST;
-    int closestType = -1;
+    int closestType = SURFACE_NONE;
     
     // Helper function to check if position is underwater and compute water info
     // Returns: (isUnderwater, waterHeight, waterNormal, waterSurfacePos)
@@ -281,7 +289,7 @@ RenderResult renderOceanScene(RenderContext ctx) {
     // Check water hit
     if (waterHit.hit && waterHit.valid && waterHit.distance < closestDist) {
         closestDist = waterHit.distance;
-        closestType = SURFACE_WATER;
+        closestType = SURFACE_PRIMARY;  // Primary surface = water in Ocean scene
     }
     
     // Check terrain hit
@@ -292,7 +300,7 @@ RenderResult renderOceanScene(RenderContext ctx) {
         // Consider terrain if it's above water, or if it's underwater and closer than water surface
         if (!terrainUnderwater || waterHit.distance > terrainHit.distance) {
             closestDist = terrainHit.distance;
-            closestType = terrainUnderwater ? SURFACE_UNDERWATER_TERRAIN : SURFACE_TERRAIN;
+            closestType = terrainUnderwater ? SURFACE_UNDERWATER_TERRAIN : SURFACE_SECONDARY;  // Secondary surface = terrain in Ocean scene
         }
     }
     
@@ -315,18 +323,18 @@ RenderResult renderOceanScene(RenderContext ctx) {
         
         // Check if surface is wet (near water line)
         float distToWater = abs(objectHit.position.y - waterHeight);
-        bool isWet = distToWater < 1.5; // Within 1.5 units of water surface
+        bool isWet = distToWater < WET_SURFACE_THRESHOLD;
         
         surfaceHit.waterSurfacePos = waterSurfacePos;
         surfaceHit.waterNormal = waterNormal;
         surfaceHit.waterDepth = waterDepth;
         surfaceHit.isWet = isWet;
-    } else if (closestType == SURFACE_WATER) {
-        // Water surface hit
+    } else if (closestType == SURFACE_PRIMARY) {
+        // Water surface hit (primary surface in Ocean scene)
         surfaceHit.hit = true;
         surfaceHit.position = waterHit.position;
         surfaceHit.distance = waterHit.distance;
-        surfaceHit.surfaceType = SURFACE_WATER;
+        surfaceHit.surfaceType = SURFACE_PRIMARY;
         
         // Stabilize position to reduce jittering
         // Use a small snap grid for XZ to ensure consistent sampling
@@ -349,8 +357,8 @@ RenderResult renderOceanScene(RenderContext ctx) {
         surfaceHit.waterNormal = surfaceHit.normal;
         surfaceHit.waterDepth = 0.0; // At water surface
         surfaceHit.isWet = false; // Water surface itself is not "wet"
-    } else if (closestType == SURFACE_TERRAIN || closestType == SURFACE_UNDERWATER_TERRAIN) {
-        // Terrain hit (above or below water)
+    } else if (closestType == SURFACE_SECONDARY || closestType == SURFACE_UNDERWATER_TERRAIN) {
+        // Terrain hit (above or below water) - secondary surface in Ocean scene
         surfaceHit.hit = true;
         surfaceHit.position = terrainHit.position;
         surfaceHit.distance = terrainHit.distance;
@@ -367,7 +375,7 @@ RenderResult renderOceanScene(RenderContext ctx) {
         
         // Check if surface is wet (near water line)
         float distToWater = abs(terrainHit.position.y - waterHeight);
-        bool isWet = distToWater < 1.5; // Within 1.5 units of water surface
+        bool isWet = distToWater < WET_SURFACE_THRESHOLD;
         
         surfaceHit.waterSurfacePos = waterSurfacePos;
         surfaceHit.waterNormal = waterNormal;
@@ -380,7 +388,7 @@ RenderResult renderOceanScene(RenderContext ctx) {
         surfaceHit.distance = MAX_DIST;
         surfaceHit.normal = vec3(0.0);
         surfaceHit.gradient = vec2(0.0);
-        surfaceHit.surfaceType = SURFACE_PRIMARY; // Default, won't be used
+        surfaceHit.surfaceType = SURFACE_NONE;
         surfaceHit.waterSurfacePos = vec3(0.0);
         surfaceHit.waterNormal = vec3(0.0, 1.0, 0.0);
         surfaceHit.waterDepth = 0.0;
