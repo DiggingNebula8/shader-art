@@ -224,6 +224,33 @@ struct WaterDepthInfo {
     vec3 waterColor;
 };
 
+// ============================================================================
+// UNDERWATER FOG/VOLUMETRIC SCATTERING
+// ============================================================================
+
+// Calculate underwater fog/volumetric scattering
+// Adds realistic underwater haze that increases with depth
+vec3 calculateUnderwaterFog(vec3 color, float depth, vec3 viewDir, vec3 sunDir, vec3 sunColor, float sunIntensity, WaterMaterial material) {
+    // Underwater fog density increases with depth
+    float fogDensity = 1.0 - exp(-depth * 0.02);
+    
+    // Fog color is tinted by water color
+    vec3 fogColor = mix(material.shallowWaterColor, material.deepWaterColor, fogDensity);
+    fogColor *= 0.3; // Darker underwater
+    
+    // Add sun rays contribution (god rays effect)
+    if (sunDir.y > 0.0) {
+        float sunRayFactor = max(dot(-viewDir, sunDir), 0.0);
+        sunRayFactor = pow(sunRayFactor, 8.0); // Tight cone
+        vec3 sunRays = sunColor * sunIntensity * sunRayFactor * 0.1;
+        fogColor += sunRays * (1.0 - exp(-depth * 0.01));
+    }
+    
+    // Blend original color with fog
+    float fogFactor = smoothstep(0.0, 1.0, fogDensity);
+    return mix(color, fogColor, fogFactor * 0.4); // 40% max fog contribution
+}
+
 
 // ============================================================================
 // WATER SHADING PARAMETERS STRUCT
@@ -455,6 +482,7 @@ vec3 calculateRefractedColor(vec3 pos, vec3 normal, vec3 viewDir, WaterDepthInfo
 
 // Calculate reflected color
 // If dynamicRoughness < 0, it will be computed from gradient and waveHeight
+// Adaptive quality: reduces samples for distant/less important reflections
 vec3 calculateReflectedColor(vec3 pos, vec3 normal, vec3 viewDir, float time, vec2 gradient, SkyAtmosphere sky, float dynamicRoughness, WaterMaterial material) {
     if (dynamicRoughness < 0.0) {
         // Compute roughness if not provided
@@ -479,10 +507,19 @@ vec3 calculateReflectedColor(vec3 pos, vec3 normal, vec3 viewDir, float time, ve
     vec3 reflectedColor = skyColor(distortedReflectedDir, sky, time);
     
     float roughnessFactor = smoothstep(material.baseRoughness, material.maxRoughness, dynamicRoughness);
-    // Use fixed sample count to avoid temporal flickering
-    const int numSamples = 2; // Fixed sample count for temporal stability
     
-    if (numSamples > 1 && dynamicRoughness > material.baseRoughness * 1.5) {
+    // Adaptive quality: reduce samples based on roughness and view angle
+    // High roughness and steep viewing angles get more samples
+    float viewAngle = 1.0 - abs(dot(viewDir, normal));
+    float qualityFactor = roughnessFactor * (0.5 + viewAngle * 0.5);
+    
+    // Determine sample count adaptively (1-3 samples)
+    int numSamples = 1;
+    if (dynamicRoughness > material.baseRoughness * 1.5 && qualityFactor > 0.3) {
+        numSamples = qualityFactor > 0.7 ? 3 : 2;
+    }
+    
+    if (numSamples > 1) {
         vec3 sampleSum = reflectedColor;
         float sampleWeight = 1.0;
         
@@ -509,6 +546,117 @@ vec3 calculateReflectedColor(vec3 pos, vec3 normal, vec3 viewDir, float time, ve
     }
     
     return reflectedColor;
+}
+
+// ============================================================================
+// FOAM CALCULATION
+// ============================================================================
+
+// Calculate foam intensity based on wave characteristics
+// Foam appears on wave crests where water is turbulent
+float calculateFoamIntensity(vec2 pos, vec2 gradient, float waveHeight, float time, WaterMaterial material) {
+    // Foam appears where:
+    // 1. Wave height is high (crests)
+    // 2. Gradient is steep (turbulent areas)
+    // 3. Wave curvature is high (breaking waves)
+    
+    float slope = length(gradient);
+    float crestFactor = smoothstep(material.foamThreshold - 0.1, material.foamThreshold + 0.3, waveHeight);
+    float steepnessFactor = smoothstep(0.3, 0.8, slope);
+    
+    // Sample nearby points to detect wave curvature/breaking
+    const float sampleRadius = 0.15;
+    float angle = dot(pos, vec2(0.7071, 0.7071)) * 0.5;
+    vec2 offset1 = vec2(cos(angle), sin(angle)) * sampleRadius;
+    vec2 offset2 = vec2(-sin(angle), cos(angle)) * sampleRadius;
+    
+    float h1 = getWaveHeight(pos + offset1, time);
+    float h2 = getWaveHeight(pos + offset2, time);
+    float hCenter = waveHeight;
+    
+    // Curvature approximation (second derivative)
+    float curvature = abs((h1 + h2) * 0.5 - hCenter) / (sampleRadius * sampleRadius);
+    float curvatureFactor = smoothstep(0.5, 2.0, curvature);
+    
+    // Combine factors
+    float foam = crestFactor * (0.6 + steepnessFactor * 0.4) * (0.7 + curvatureFactor * 0.3);
+    foam = pow(foam, 0.8); // Smooth falloff
+    foam = smoothstep(0.1, 0.9, foam);
+    
+    return foam * material.foamIntensity;
+}
+
+// Calculate water spray effect (particles/droplets above water surface)
+// Creates visual spray effect at wave crests and turbulent areas
+vec3 calculateWaterSpray(vec2 pos, vec2 gradient, float waveHeight, float time, WaterMaterial material) {
+    float slope = length(gradient);
+    
+    // Spray appears at wave crests with high gradient
+    float sprayFactor = smoothstep(0.4, 1.0, slope);
+    float crestFactor = smoothstep(material.foamThreshold, material.foamThreshold + 0.4, waveHeight);
+    
+    sprayFactor *= crestFactor;
+    
+    // Add temporal variation for dynamic spray
+    float timeVariation = sin(dot(pos, vec2(0.5, 0.866)) * 3.0 + time * 4.0) * 0.5 + 0.5;
+    sprayFactor *= timeVariation;
+    
+    // Spray color (white/transparent)
+    vec3 sprayColor = vec3(0.98, 0.99, 1.0);
+    
+    // Spray intensity decreases with height above water
+    // (spray particles fall back down)
+    float heightFactor = 1.0 - smoothstep(0.0, 0.5, waveHeight);
+    sprayFactor *= heightFactor;
+    
+    return sprayColor * sprayFactor * 0.15; // Subtle spray effect
+}
+
+// ============================================================================
+// SUN GLINTS CALCULATION
+// ============================================================================
+
+// Calculate sun glints (specular highlights from sun reflection)
+// Based on microfacet theory - glints appear when view direction aligns with reflected sun
+vec3 calculateSunGlints(vec3 normal, vec3 viewDir, vec3 sunDir, vec3 sunColor, float sunIntensity, float roughness, float time, vec2 pos) {
+    if (sunDir.y <= 0.0) {
+        return vec3(0.0); // Sun below horizon
+    }
+    
+    // Calculate reflected sun direction
+    vec3 reflectedSun = reflect(-sunDir, normal);
+    float viewSunAlignment = dot(normalize(viewDir), normalize(reflectedSun));
+    
+    // Glints appear when view aligns with reflected sun
+    // Use tighter distribution for smoother water, wider for rough water
+    float glintPower = mix(128.0, 32.0, roughness);
+    float glintIntensity = pow(max(viewSunAlignment, 0.0), glintPower);
+    
+    // Add wave-based variation for more realistic glints
+    // Sample wave height at multiple points for glint variation
+    float waveVariation = 0.0;
+    const int numGlintSamples = 2;
+    float jitter = hash(pos * 0.1 + time * 0.01) * TAU;
+    
+    for (int i = 0; i < numGlintSamples; i++) {
+        float angle = float(i) * TAU / float(numGlintSamples) + jitter;
+        vec2 offset = vec2(cos(angle), sin(angle)) * 0.05;
+        float h = getWaveHeight(pos + offset, time);
+        waveVariation += abs(h) * 0.1;
+    }
+    waveVariation /= float(numGlintSamples);
+    
+    // Modulate glint intensity with wave variation
+    glintIntensity *= (1.0 + waveVariation);
+    
+    // Color and intensity
+    vec3 glintColor = sunColor * sunIntensity * glintIntensity * 2.0;
+    
+    // Fade out glints at grazing angles (Fresnel-like)
+    float fresnelFactor = 1.0 - abs(dot(viewDir, normal));
+    glintColor *= smoothstep(0.3, 1.0, fresnelFactor);
+    
+    return glintColor;
 }
 
 // ============================================================================
@@ -559,8 +707,13 @@ WaterLightingResult calculateWaterLighting(vec3 pos, vec3 normal, vec3 viewDir, 
     if (result.reflectedDir.y > 0.0) {
         normalReflectedColor = skyColor(result.reflectedDir, sky, time);
         
+        // Adaptive IBL sampling: reduce samples for low roughness or distant surfaces
+        // Only use multiple samples when roughness is high enough to warrant it
         if (result.dynamicRoughness > material.baseRoughness * 1.2) {
-            const int numIBLSamples = 3;
+            // Adaptive sample count based on roughness (1-3 samples)
+            float roughnessFactor = smoothstep(material.baseRoughness * 1.2, material.maxRoughness, result.dynamicRoughness);
+            int numIBLSamples = roughnessFactor > 0.5 ? 3 : 2;
+            
             vec3 sampleSum = normalReflectedColor;
             float sampleWeight = 1.0;
             
@@ -612,7 +765,30 @@ WaterLightingResult calculateWaterLighting(vec3 pos, vec3 normal, vec3 viewDir, 
         waterBase += volumetricLight;
     }
     
-    result.color = waterBase + specular;
+    // Add sun glints (specular highlights)
+    vec3 sunGlints = calculateSunGlints(normal, viewDir, lightDir, lightColor, light.sunIntensity, result.dynamicRoughness, time, pos.xz);
+    
+    // Calculate and add foam
+    float waveHeight = getWaveHeight(pos.xz, time);
+    float foamIntensity = calculateFoamIntensity(pos.xz, gradient, waveHeight, time, material);
+    vec3 foam = material.foamColor * foamIntensity;
+    
+    // Foam reduces water transparency
+    float foamFactor = clamp(foamIntensity, 0.0, 1.0);
+    waterBase = mix(waterBase, foam, foamFactor);
+    
+    // Add water spray effect (particles above surface)
+    vec3 spray = calculateWaterSpray(pos.xz, gradient, waveHeight, time, material);
+    
+    vec3 finalColor = waterBase + specular + sunGlints + spray;
+    
+    // Apply underwater fog/volumetric scattering for realistic depth perception
+    // Only apply if we're looking into water (view direction goes into water)
+    if (dot(viewDir, normal) < 0.0) {
+        finalColor = calculateUnderwaterFog(finalColor, depthInfo.depth, viewDir, lightDir, lightColor, light.sunIntensity, material);
+    }
+    
+    result.color = finalColor;
     return result;
 }
 
@@ -627,6 +803,7 @@ WaterShadingResult shadeWater(WaterShadingParams params) {
     WaterDepthInfo depthInfo = calculateWaterDepthAndColor(params.pos, params.normal, params.viewDir, params.floorParams, params.material);
     
     // Compute roughness once (used by both reflection and lighting)
+    // Cache wave height calculation (used multiple times)
     float waveHeight = getWaveHeight(params.pos.xz, params.time);
     float dynamicRoughness = calculateWaterRoughness(params.gradient, waveHeight, params.material);
     
@@ -637,6 +814,7 @@ WaterShadingResult shadeWater(WaterShadingParams params) {
     vec3 reflectedColor = calculateReflectedColor(params.pos, params.normal, params.viewDir, params.time, params.gradient, params.sky, dynamicRoughness, params.material);
     
     // Calculate final lighting (pass precomputed roughness)
+    // Note: calculateWaterLighting now handles foam and sun glints internally
     WaterLightingResult lighting = calculateWaterLighting(params.pos, params.normal, params.viewDir, refractedColor, reflectedColor, 
                                                           depthInfo, params.time, params.gradient, params.sky, params.light, dynamicRoughness, params.material);
     

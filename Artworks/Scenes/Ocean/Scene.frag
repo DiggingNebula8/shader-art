@@ -203,10 +203,32 @@ float getDepthAlongDirection(vec3 start, vec3 dir, float maxDepth, TerrainParams
 
 // Ocean scene rendering function
 RenderResult renderOceanScene(RenderContext ctx) {
-    // Raymarch all surfaces
-    VolumeHit objectHit = raymarchBuoy(ctx.cameraPos, ctx.rayDir, MAX_DIST, ctx.time);
+    // Optimized raymarching: ray march surfaces in order of likely visibility
+    // Water is most likely to be hit first, so check it first for early exit optimization
+    
     VolumeHit waterHit = raymarchWaveSurface(ctx.cameraPos, ctx.rayDir, MAX_DIST, ctx.time);
-    VolumeHit terrainHit = raymarchTerrain(ctx.cameraPos, ctx.rayDir, MAX_DIST, ctx.time, ctx.terrainParams);
+    
+    // Early exit optimization: if water is very close, skip other surfaces
+    // (they won't be visible behind water)
+    float earlyExitThreshold = 5.0; // Skip other surfaces if water is within 5 units
+    bool skipOtherSurfaces = waterHit.hit && waterHit.valid && waterHit.distance < earlyExitThreshold;
+    
+    VolumeHit objectHit;
+    VolumeHit terrainHit;
+    
+    if (!skipOtherSurfaces) {
+        // Only raymarch other surfaces if water is not blocking them
+        objectHit = raymarchBuoy(ctx.cameraPos, ctx.rayDir, MAX_DIST, ctx.time);
+        terrainHit = raymarchTerrain(ctx.cameraPos, ctx.rayDir, MAX_DIST, ctx.time, ctx.terrainParams);
+    } else {
+        // Initialize with no-hit values
+        objectHit.hit = false;
+        objectHit.valid = false;
+        objectHit.distance = MAX_DIST;
+        terrainHit.hit = false;
+        terrainHit.valid = false;
+        terrainHit.distance = MAX_DIST;
+    }
     
     SurfaceHit surfaceHit;
     
@@ -215,35 +237,65 @@ RenderResult renderOceanScene(RenderContext ctx) {
     float closestDist = MAX_DIST;
     int closestType = -1;
     
+    // Helper function to check if position is underwater and compute water info
+    // Returns: (isUnderwater, waterHeight, waterNormal, waterSurfacePos)
+    // This is computed once per surface type for efficiency
+    
+    // Check object hit
     if (objectHit.hit && objectHit.valid && objectHit.distance < closestDist) {
-        closestDist = objectHit.distance;
-        closestType = SURFACE_OBJECT;
+        float objectWaterHeight = getWaveHeight(objectHit.position.xz, ctx.time);
+        bool objectUnderwater = objectHit.position.y < objectWaterHeight;
+        
+        if (!objectUnderwater || waterHit.distance > objectHit.distance) {
+            // Object is above water, or object is closer than water surface
+            closestDist = objectHit.distance;
+            closestType = objectUnderwater ? SURFACE_UNDERWATER_OBJECT : SURFACE_OBJECT;
+        }
     }
+    
+    // Check water hit
     if (waterHit.hit && waterHit.valid && waterHit.distance < closestDist) {
         closestDist = waterHit.distance;
         closestType = SURFACE_WATER;
     }
+    
+    // Check terrain hit
     if (terrainHit.hit && terrainHit.valid && terrainHit.distance < closestDist) {
-        // Only consider terrain if it's above water level (above-water terrain)
         float terrainWaterHeight = getWaveHeight(terrainHit.position.xz, ctx.time);
-        if (terrainHit.position.y > terrainWaterHeight) {
+        bool terrainUnderwater = terrainHit.position.y < terrainWaterHeight;
+        
+        // Consider terrain if it's above water, or if it's underwater and closer than water surface
+        if (!terrainUnderwater || waterHit.distance > terrainHit.distance) {
             closestDist = terrainHit.distance;
-            closestType = SURFACE_TERRAIN;
+            closestType = terrainUnderwater ? SURFACE_UNDERWATER_TERRAIN : SURFACE_TERRAIN;
         }
     }
     
     // Set up surface hit based on closest surface
-    if (closestType == SURFACE_OBJECT) {
-        // Object hit
+    if (closestType == SURFACE_OBJECT || closestType == SURFACE_UNDERWATER_OBJECT) {
+        // Object hit (above or below water)
         surfaceHit.hit = true;
         surfaceHit.position = objectHit.position;
         surfaceHit.distance = objectHit.distance;
         surfaceHit.normal = objectHit.normal;
-        surfaceHit.surfaceType = SURFACE_OBJECT;
+        surfaceHit.surfaceType = closestType;
         surfaceHit.gradient = vec2(0.0);
-        // Objects don't need water surface info
-        surfaceHit.waterSurfacePos = objectHit.position;
-        surfaceHit.waterNormal = vec3(0.0, 1.0, 0.0);
+        
+        // Compute water surface info for wet/underwater effects
+        float waterHeight = getWaveHeight(objectHit.position.xz, ctx.time);
+        vec2 gradient;
+        vec3 waterNormal = getNormal(objectHit.position.xz, ctx.time, gradient);
+        vec3 waterSurfacePos = vec3(objectHit.position.x, waterHeight, objectHit.position.z);
+        float waterDepth = max(waterHeight - objectHit.position.y, 0.0);
+        
+        // Check if surface is wet (near water line)
+        float distToWater = abs(objectHit.position.y - waterHeight);
+        bool isWet = distToWater < 1.5; // Within 1.5 units of water surface
+        
+        surfaceHit.waterSurfacePos = waterSurfacePos;
+        surfaceHit.waterNormal = waterNormal;
+        surfaceHit.waterDepth = waterDepth;
+        surfaceHit.isWet = isWet;
     } else if (closestType == SURFACE_WATER) {
         // Water surface hit
         surfaceHit.hit = true;
@@ -270,24 +322,32 @@ RenderResult renderOceanScene(RenderContext ctx) {
         // Water surface info is the same as the hit position for water surfaces
         surfaceHit.waterSurfacePos = stablePos;
         surfaceHit.waterNormal = surfaceHit.normal;
-    } else if (closestType == SURFACE_TERRAIN) {
-        // Above-water terrain hit
+        surfaceHit.waterDepth = 0.0; // At water surface
+        surfaceHit.isWet = false; // Water surface itself is not "wet"
+    } else if (closestType == SURFACE_TERRAIN || closestType == SURFACE_UNDERWATER_TERRAIN) {
+        // Terrain hit (above or below water)
         surfaceHit.hit = true;
         surfaceHit.position = terrainHit.position;
         surfaceHit.distance = terrainHit.distance;
         surfaceHit.normal = terrainHit.normal;
-        surfaceHit.surfaceType = SURFACE_TERRAIN;
+        surfaceHit.surfaceType = closestType;
         surfaceHit.gradient = vec2(0.0);
         
-        // Compute water surface information for caustics (Ocean scene-specific)
-        // This terrain is above water, but we still compute water surface info
-        // in case it's needed for shading (e.g., atmospheric effects)
+        // Compute water surface information for caustics and wet/underwater effects
         float waterHeight = getWaveHeight(terrainHit.position.xz, ctx.time);
         vec2 gradient;
         vec3 waterNormal = getNormal(terrainHit.position.xz, ctx.time, gradient);
         vec3 waterSurfacePos = vec3(terrainHit.position.x, waterHeight, terrainHit.position.z);
+        float waterDepth = max(waterHeight - terrainHit.position.y, 0.0);
+        
+        // Check if surface is wet (near water line)
+        float distToWater = abs(terrainHit.position.y - waterHeight);
+        bool isWet = distToWater < 1.5; // Within 1.5 units of water surface
+        
         surfaceHit.waterSurfacePos = waterSurfacePos;
         surfaceHit.waterNormal = waterNormal;
+        surfaceHit.waterDepth = waterDepth;
+        surfaceHit.isWet = isWet;
     } else {
         // No hit
         surfaceHit.hit = false;
@@ -298,6 +358,8 @@ RenderResult renderOceanScene(RenderContext ctx) {
         surfaceHit.surfaceType = SURFACE_WATER; // Default, won't be used
         surfaceHit.waterSurfacePos = vec3(0.0);
         surfaceHit.waterNormal = vec3(0.0, 1.0, 0.0);
+        surfaceHit.waterDepth = 0.0;
+        surfaceHit.isWet = false;
     }
     
     // Compose final color (uses ctx.rayDir for shading calculations)
@@ -371,14 +433,14 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec2 uv = fragCoord / iResolution.xy;
     
     // Create sky and terrain configuration
-    SkyAtmosphere sky = createSkyPreset_Foggy();
-    TerrainParams terrainParams = createHillyTerrain();
+    SkyAtmosphere sky = createSkyPreset_Stormy();
+    TerrainParams terrainParams = createPlainsTerrain();
     
     // Create water material (art-directable - can be tweaked without recompilation)
-    WaterMaterial waterMaterial = createDefaultWaterMaterial();
+    WaterMaterial waterMaterial = createClearTropicalWater();
     // Example: Uncomment to use different water presets
     // waterMaterial = createClearTropicalWater();
-    // waterMaterial = createMurkyWater();
+    //waterMaterial = createMurkyWater();
     // waterMaterial = createChoppyWater();
     
     // Create terrain material (art-directable - can be tweaked without recompilation)

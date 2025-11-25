@@ -36,6 +36,8 @@
 const int SURFACE_WATER = 0;
 const int SURFACE_TERRAIN = 1;
 const int SURFACE_OBJECT = 2;
+const int SURFACE_UNDERWATER_TERRAIN = 3;  // Terrain below water surface
+const int SURFACE_UNDERWATER_OBJECT = 4;   // Object below water surface
 
 struct SurfaceHit {
     bool hit;
@@ -44,10 +46,12 @@ struct SurfaceHit {
     vec2 gradient;
     float distance;
     int surfaceType;  // SURFACE_WATER, SURFACE_TERRAIN, etc.
-    // Optional water surface information (for terrain caustics)
-    // Scenes should set these when rendering terrain that may have water above it
+    // Optional water surface information (for terrain caustics and wet surfaces)
+    // Scenes should set these when rendering terrain/objects that may have water above them
     vec3 waterSurfacePos;  // Water surface position (default: position if no water)
     vec3 waterNormal;      // Water surface normal (default: vec3(0,1,0) if no water)
+    float waterDepth;      // Depth below water surface (0.0 = at surface, >0 = underwater)
+    bool isWet;            // Whether surface is wet (near water line)
 };
 
 struct RenderResult {
@@ -106,8 +110,8 @@ vec3 composeFinalColor(SurfaceHit hit, RenderContext ctx) {
         WaterShadingResult waterResult = shadeWater(waterParams);
         
         return waterResult.color;
-    } else if (hit.surfaceType == SURFACE_TERRAIN) {
-        // Terrain surface (above-water terrain)
+    } else if (hit.surfaceType == SURFACE_TERRAIN || hit.surfaceType == SURFACE_UNDERWATER_TERRAIN) {
+        // Terrain surface (above-water or underwater)
         TerrainShadingParams terrainParams;
         terrainParams.pos = hit.position;
         terrainParams.normal = hit.normal;
@@ -122,12 +126,16 @@ vec3 composeFinalColor(SurfaceHit hit, RenderContext ctx) {
         // default values (no water above terrain) in the scene's render function.
         terrainParams.waterSurfacePos = hit.waterSurfacePos;
         terrainParams.waterNormal = hit.waterNormal;
+        terrainParams.waterDepth = hit.waterDepth;
+        terrainParams.isWet = hit.isWet;
+        terrainParams.waterMaterial = ctx.waterMaterial;
         
         terrainParams.material = ctx.terrainMaterial;
         
+        // TerrainShading system handles its own water interactions internally
         return shadeTerrain(terrainParams);
-    } else if (hit.surfaceType == SURFACE_OBJECT) {
-        // Object surface
+    } else if (hit.surfaceType == SURFACE_OBJECT || hit.surfaceType == SURFACE_UNDERWATER_OBJECT) {
+        // Object surface (above-water or underwater)
         // Prepare ObjectShading parameters
         ObjectShadingParams objectParams;
         objectParams.pos = hit.position;
@@ -137,8 +145,13 @@ vec3 composeFinalColor(SurfaceHit hit, RenderContext ctx) {
         objectParams.light = light;
         objectParams.sky = ctx.sky;
         objectParams.material = ctx.objectMaterial;
+        objectParams.waterSurfacePos = hit.waterSurfacePos;
+        objectParams.waterNormal = hit.waterNormal;
+        objectParams.waterDepth = hit.waterDepth;
+        objectParams.isWet = hit.isWet;
+        objectParams.waterMaterial = ctx.waterMaterial;
         
-        // Shade object using ObjectShading system
+        // ObjectShading system handles its own water interactions internally
         return shadeObject(objectParams);
     }
     
