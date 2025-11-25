@@ -61,6 +61,7 @@ vec3 calculateCaustics(vec3 floorPos, vec3 waterSurfacePos, vec3 waterNormal, ve
     int numSamples = depthFactor > 0.7 ? 7 : (depthFactor > 0.3 ? 5 : 3);
     
     float causticsIntensity = 0.0;
+    float totalWeight = 0.0;
     
     float sampleRadius = depth * 0.15;
     
@@ -92,13 +93,10 @@ vec3 calculateCaustics(vec3 floorPos, vec3 waterSurfacePos, vec3 waterNormal, ve
         // Weight samples by distance (center samples more important)
         float weight = 1.0 / (1.0 + float(i) * 0.2);
         causticsIntensity += sampleIntensity * gaussian * weight;
+        totalWeight += weight;
     }
     
     // Normalize by effective sample weight
-    float totalWeight = 0.0;
-    for (int i = 0; i < numSamples; i++) {
-        totalWeight += 1.0 / (1.0 + float(i) * 0.2);
-    }
     causticsIntensity /= max(totalWeight, 1.0);
     
     // Optimized: reuse wave height calculation for large scale pattern
