@@ -6,6 +6,8 @@
 // ============================================================================
 // This system has NO dependencies on Sky, Terrain, or Shading systems
 // It provides pure geometry functions for wave generation
+// Note: While based on ocean wave simulation, this system is generic
+// and can be used for any water surface simulation
 // ============================================================================
 
 #ifndef WAVE_SYSTEM_FRAG
@@ -17,7 +19,7 @@
 // WAVE PARAMETERS
 // ============================================================================
 
-// Wave Parameters - Weta Digital quality ocean with proper spectrum distribution
+// Wave Parameters - Weta Digital quality water waves with proper spectrum distribution
 // Increased wave count for more realistic detail and interaction
 const int NUM_WAVES = 10;
 
@@ -45,7 +47,7 @@ vec2 getWaveDir(int i) {
     return waveDirs[i];
 }
 
-// Wave amplitudes (m) - follows realistic ocean spectrum (Phillips-like distribution)
+// Wave amplitudes (m) - follows realistic water wave spectrum (Phillips-like distribution)
 // Primary swell dominates, with proper falloff for detail waves
 const float waveAmps[NUM_WAVES] = float[](
     1.4,  // Primary swell - largest
@@ -61,7 +63,7 @@ const float waveAmps[NUM_WAVES] = float[](
 );
 
 // Wave numbers k (rad/m) - proper spectrum distribution
-// Lower wave numbers (longer waves) have more energy, following ocean physics
+// Lower wave numbers (longer waves) have more energy, following water wave physics
 const float waveNumbers[NUM_WAVES] = float[](
     0.12, // Primary swell - very long wavelength (~52m)
     0.20, // Secondary swell

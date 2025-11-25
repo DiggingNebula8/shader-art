@@ -9,7 +9,7 @@
 //
 // Architecture:
 //   MaterialSystem (THIS FILE)
-//     ├─ WaterMaterial - Used for Ocean rendering
+//     ├─ WaterMaterial - Used for water/liquid surface rendering
 //     ├─ TerrainMaterial - Used for terrain/floor rendering
 //     └─ [Future materials can be added here]
 //
@@ -26,7 +26,7 @@
 // ============================================================================
 // WATER MATERIAL
 // ============================================================================
-// Material type for ocean/water surfaces
+// Material type for water/liquid surfaces
 // Used by: WaterShading system
 // ============================================================================
 //
@@ -45,9 +45,12 @@ struct WaterMaterial {
     vec3 shallowWaterColor;  // Color for shallow water (bright turquoise)
     float baseRoughness;     // Base roughness for calm water (very smooth)
     float maxRoughness;      // Maximum roughness for choppy water
+    vec3 foamColor;          // Foam color (typically white/off-white)
+    float foamIntensity;     // Foam intensity multiplier
+    float foamThreshold;     // Wave height threshold for foam generation
 };
 
-// Create default water material instance (realistic ocean water)
+// Create default water material instance (realistic water)
 WaterMaterial createDefaultWaterMaterial() {
     WaterMaterial mat;
     mat.absorption = vec3(0.15, 0.045, 0.015);  // Realistic absorption (red absorbed most)
@@ -55,6 +58,9 @@ WaterMaterial createDefaultWaterMaterial() {
     mat.shallowWaterColor = vec3(0.0, 0.5, 0.75); // Bright turquoise for shallow water
     mat.baseRoughness = 0.03;                     // Very smooth calm water
     mat.maxRoughness = 0.12;                      // Choppy water maximum
+    mat.foamColor = vec3(0.95, 0.98, 1.0);        // Off-white foam
+    mat.foamIntensity = 0.6;                      // Default foam intensity
+    mat.foamThreshold = 0.1;                      // Wave height threshold for foam
     return mat;
 }
 
@@ -64,6 +70,7 @@ WaterMaterial createClearTropicalWater() {
     mat.absorption = vec3(0.05, 0.02, 0.01);      // Less absorption (clearer water)
     mat.deepWaterColor = vec3(0.0, 0.3, 0.5);    // Brighter deep water
     mat.shallowWaterColor = vec3(0.0, 0.6, 0.8); // More cyan shallow water
+    mat.foamIntensity = 0.2;                      // Less foam for calm tropical water
     return mat;
 }
 
@@ -80,7 +87,9 @@ WaterMaterial createMurkyWater() {
 WaterMaterial createChoppyWater() {
     WaterMaterial mat = createDefaultWaterMaterial();
     mat.baseRoughness = 0.05;                    // Higher base roughness
-    mat.maxRoughness = 0.2;                      // Higher max roughness
+    mat.maxRoughness = 0.2;                       // Higher max roughness
+    mat.foamIntensity = 1.5;                      // More foam for choppy water
+    mat.foamThreshold = 0.1;                     // Lower threshold for more foam
     return mat;
 }
 
@@ -133,6 +142,37 @@ TerrainMaterial createRockyTerrainMaterial() {
     mat.deepColor = vec3(0.25, 0.25, 0.25);  // Darker rock
     mat.roughness = 0.9;                     // Very rough surface
     mat.specularIntensity = 0.1;             // Less specular (dull rock)
+    return mat;
+}
+
+// ============================================================================
+// OBJECT MATERIAL
+// ============================================================================
+// Material type for objects/subjects in the scene
+// Used by: ObjectSystem shading
+// ============================================================================
+
+struct ObjectMaterial {
+    vec3 baseColor;          // Base object color
+    float roughness;         // Surface roughness (0.0 = smooth, 1.0 = rough)
+    float metallic;          // Metallic factor (0.0 = dielectric, 1.0 = metal)
+    float specularIntensity; // Specular highlight intensity
+};
+
+// Create default object material (neutral gray)
+ObjectMaterial createDefaultObjectMaterial() {
+    ObjectMaterial mat;
+    mat.baseColor = vec3(0.5, 0.5, 0.5);  // Neutral gray color
+    mat.roughness = 0.3;                   // Moderately smooth
+    mat.metallic = 0.0;                    // Non-metallic
+    mat.specularIntensity = 0.5;           // Moderate specular
+    return mat;
+}
+
+// Create white object material
+ObjectMaterial createWhiteObjectMaterial() {
+    ObjectMaterial mat = createDefaultObjectMaterial();
+    mat.baseColor = vec3(0.9, 0.9, 0.9);  // White color
     return mat;
 }
 

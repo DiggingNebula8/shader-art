@@ -8,7 +8,7 @@ The Render Pipeline orchestrates all rendering systems to produce the final scen
 
 - **Orchestration**: Coordinates all rendering systems
 - **Raymarching**: Finds surface intersections using VolumeRaymarching
-- **Shading**: Delegates to WaterShading and TerrainShading systems
+- **Shading**: Delegates to WaterShading, TerrainShading, and ObjectShading systems
 - **Composition**: Combines all contributions into final color
 
 ## Dependencies
@@ -17,8 +17,10 @@ The Render Pipeline includes and coordinates:
 - **MaterialSystem**: Material properties and factory functions
 - **WaveSystem**: Wave geometry and raymarching
 - **TerrainSystem**: Terrain geometry and raymarching
+- **ObjectSystem**: Object geometry and raymarching
 - **WaterShading**: Water material properties and PBR shading
 - **TerrainShading**: Terrain material properties and caustics
+- **ObjectShading**: Object material properties and PBR shading
 - **SkySystem**: Atmosphere and lighting
 - **VolumeRaymarching**: Unified raymarching algorithm
 - **CameraSystem**: Camera parameters (for future use)
@@ -38,6 +40,7 @@ struct RenderContext {
     Camera camera;         // Camera parameters
     WaterMaterial waterMaterial;  // Water material properties (art-directable)
     TerrainMaterial terrainMaterial;  // Terrain material properties (art-directable)
+    ObjectMaterial objectMaterial;  // Object material properties (art-directable)
 };
 ```
 
@@ -69,10 +72,34 @@ struct SurfaceHit {
 
 ### Surface Type Constants
 
+**Generic Surface Types:**
 ```glsl
-const int SURFACE_WATER = 0;
-const int SURFACE_TERRAIN = 1;
+const int SURFACE_PRIMARY = 0;    // Main surface (water, ground, floor, etc.)
+const int SURFACE_SECONDARY = 1;   // Secondary surface (terrain, floor, etc.)
+const int SURFACE_OBJECT = 2;      // Interactive objects
+const int SURFACE_VOLUME = 3;     // Volumetric surfaces
 ```
+
+**Backward Compatibility:**
+```glsl
+const int SURFACE_WATER = SURFACE_PRIMARY;
+const int SURFACE_TERRAIN = SURFACE_SECONDARY;
+```
+
+**Scene-Specific Extensions:**
+Scenes can extend surface types using helper macros:
+
+```glsl
+// After including RenderPipeline.frag:
+const int SURFACE_UNDERWATER_TERRAIN = SURFACE_SCENE_EXTENSION_BASE + SURFACE_TERRAIN_TYPE(0);
+const int SURFACE_UNDERWATER_OBJECT = SURFACE_SCENE_EXTENSION_BASE + SURFACE_OBJECT_TYPE(0);
+```
+
+**Helper Macros:**
+- `SURFACE_TERRAIN_TYPE(offset)` - Creates terrain-type surface (maps to terrain shading)
+- `SURFACE_OBJECT_TYPE(offset)` - Creates object-type surface (maps to object shading)
+
+See `MACRO_CONTRACTS.md` for complete documentation.
 
 ## Main Function
 
@@ -110,7 +137,7 @@ ctx.cameraPos = cam.position;
 ctx.rayDir = rayDir;
 ctx.time = iTime;
 ctx.sky = createSkyPreset_ClearDay();
-ctx.terrainParams = createDefaultOceanFloor();
+ctx.terrainParams = createFlatTerrain();
 ctx.camera = cam;
 ctx.waterMaterial = waterMaterial;
 ctx.terrainMaterial = terrainMaterial;
@@ -230,7 +257,7 @@ The Render Pipeline coordinates systems in this order:
 #include "SkySystem.frag"
 
 SkyAtmosphere sky = createSkyPreset_ClearDay();
-TerrainParams terrain = createDefaultOceanFloor();
+TerrainParams terrain = createFlatTerrain();
 WaterMaterial waterMaterial = createDefaultWaterMaterial();
 TerrainMaterial terrainMaterial = createDefaultTerrainMaterial();
 

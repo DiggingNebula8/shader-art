@@ -3,6 +3,13 @@
 // ============================================================================
 // Implements real camera parameters: shutter speed, f-stop, ISO, focal length
 // See CAMERA_SYSTEM.md for documentation and usage examples
+//
+// NAMING CONVENTION:
+//   Camera system uses simplified naming: create<Variant>Camera()
+//   (e.g., createSunnyDayCamera(), createLowLightCamera())
+//   This differs from materials which use create<Variant><Type>Material()
+//   because cameras are configuration objects, not materials.
+//   This is an intentional design choice and is consistent across all presets.
 // ============================================================================
 
 #ifndef CAMERA_SYSTEM_FRAG

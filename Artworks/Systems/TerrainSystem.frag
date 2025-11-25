@@ -182,8 +182,8 @@ TerrainParams createDefaultTerrain() {
     return initTerrainParams();
 }
 
-// Low-poly, flat terrain optimized for ocean floor
-TerrainParams createDefaultOceanFloor() {
+// Low-poly, flat terrain with minimal height variation
+TerrainParams createFlatTerrain() {
     TerrainParams params = initTerrainParams();
     params.baseHeight = -105.0;
     params.heightVariation = 2.0;

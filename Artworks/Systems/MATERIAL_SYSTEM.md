@@ -8,7 +8,7 @@ The Material System provides a centralized registry for creating and managing ma
 
 ```
 MaterialSystem
-  ├─ WaterMaterial - Used for Ocean rendering
+  ├─ WaterMaterial - Used for water/liquid surface rendering
   ├─ TerrainMaterial - Used for terrain/floor rendering
   └─ [Future materials can be added here]
 ```
@@ -38,7 +38,7 @@ struct WaterMaterial {
 ### Factory Functions
 
 #### `WaterMaterial createDefaultWaterMaterial()`
-Creates realistic ocean water material with default values.
+Creates realistic water material with default values.
 
 **Properties:**
 - `absorption`: `vec3(0.15, 0.045, 0.015)` m⁻¹ - Realistic absorption (red absorbed most)
@@ -113,7 +113,7 @@ struct TerrainMaterial {
 ### Factory Functions
 
 #### `TerrainMaterial createDefaultTerrainMaterial()`
-Creates default terrain material with realistic ocean floor properties.
+Creates default terrain material with realistic terrain properties.
 
 **Properties:**
 - `baseColor`: `vec3(0.3, 0.25, 0.2)` - Brownish terrain color
@@ -133,7 +133,7 @@ Creates sandy terrain material preset.
 **Properties:**
 - Sandy beige colors
 - Less rough than default
-- Suitable for beach/sandy ocean floor
+- Suitable for beach/sandy terrain
 
 **Example:**
 ```glsl
@@ -149,7 +149,7 @@ Creates rocky terrain material preset.
 - Grayish rock colors
 - Very rough surface
 - Less specular (dull rock)
-- Suitable for rocky ocean floor
+- Suitable for rocky terrain
 
 **Example:**
 ```glsl

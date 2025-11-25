@@ -82,6 +82,7 @@ struct FogConfig {
     float fogHeightFalloff; // Fog height falloff rate
     float fogDistanceFalloff; // Fog distance falloff (0 = constant, higher = more fog at distance)
     float fogHorizonBoost;   // Additional fog density boost at horizon (0-1)
+    float fogBaseHeight;     // Reference height for height fog (typically ground level)
     vec3 fogColor;          // Base fog color
 };
 
@@ -103,7 +104,7 @@ struct SkyAtmosphere {
     float exposure;         // Overall sky exposure adjustment
     float contrast;         // Sky contrast (1.0 = default)
     float saturation;       // Sky color saturation (1.0 = default)
-    float horizonOffset;    // Horizon line offset (0.0 = sea level)
+    float horizonOffset;    // Horizon line offset (0.0 = reference height)
 };
 
 // --- Default Sky Configuration ---
@@ -165,6 +166,7 @@ SkyAtmosphere createDefaultSky() {
     sky.fog.fogHeightFalloff = 8.0;    // Increased further for very smooth height transition
     sky.fog.fogDistanceFalloff = 0.0008; // Distance-based density increase (more fog at horizon)
     sky.fog.fogHorizonBoost = 0.3;      // Additional density boost at horizon (30%)
+    sky.fog.fogBaseHeight = 0.0;        // Reference height for height fog (ground level)
     sky.fog.fogColor = vec3(0.5, 0.6, 0.7);
     
     // Advanced
@@ -678,23 +680,14 @@ vec3 skyColor(vec3 dir, SkyAtmosphere sky, float time) {
 float calculateFogDensity(vec3 worldPos, vec3 camPos, SkyAtmosphere sky) {
     if (!sky.fog.enableFog) return 0.0;
     
-    // Reference height (typically sea level or ground level)
-    const float FOG_HEIGHT = 0.0; // Sea level
-    
-    // Height above reference plane
+    // Height above reference plane (configurable via fogBaseHeight)
     // Use smooth transition to avoid discontinuities
-    float height = worldPos.y - FOG_HEIGHT;
+    float height = worldPos.y - sky.fog.fogBaseHeight;
     
     // Exponential height fog density
     // Density decreases exponentially as height increases
-    // Add small offset to ensure smoothness at sea level
+    // Add small offset to ensure smoothness at reference height
     float heightDensity = sky.fog.fogDensity * exp(-max(height, -1.0) / max(sky.fog.fogHeightFalloff, 0.1));
-    
-    // Smooth transition for heights below sea level (underwater/at ocean surface)
-    if (height < 0.0) {
-        float underwaterFactor = exp(height * 0.5); // Smooth fade below sea level
-        heightDensity *= mix(0.3, 1.0, underwaterFactor); // Reduce fog density underwater
-    }
     
     // Distance-based density increase (more fog at horizon/distance)
     float dist = length(worldPos - camPos);
@@ -716,16 +709,12 @@ float calculateFogTransmittance(vec3 startPos, vec3 endPos, vec3 camPos, SkyAtmo
     vec3 rayDir = normalize(endPos - startPos);
     float rayLength = length(endPos - startPos);
     
-    // Adaptive sampling: more samples for longer rays and near surface
-    int numSamples = 8;
-    float heightAtStart = startPos.y;
-    float heightAtEnd = endPos.y;
-    float minHeight = min(heightAtStart, heightAtEnd);
-    
-    // Increase samples near ocean surface for smoother transitions
-    if (abs(minHeight) < 5.0) {
-        numSamples = 12; // More samples near surface
-    }
+    // Adaptive sampling: more samples for longer rays and denser fog
+    // Derive sample count from ray length and fog density, clamped to reasonable range
+    const int MIN_SAMPLES = 4;
+    const int MAX_SAMPLES = 16;
+    float densityFactor = sky.fog.fogDensity * 100.0; // Scale density for sample calculation
+    int numSamples = int(clamp(4.0 + rayLength * 0.5 + densityFactor * 2.0, float(MIN_SAMPLES), float(MAX_SAMPLES)));
     
     float stepSize = rayLength / float(numSamples);
     
@@ -851,28 +840,6 @@ vec3 applyAtmosphericFog(vec3 color, vec3 pos, vec3 camPos, vec3 rayDir, SkyAtmo
     // Mix base fog color with sky color
     // Horizon gets more sky color, higher elevations get base fog color
     fogColor = mix(fogColor, skyFogColor, horizonFactor * 0.8);
-    
-    // Smooth transition near ocean surface to prevent seams
-    // Ocean surface is typically around y=0 (with wave variations)
-    // Create smooth blend zone around sea level
-    float oceanHeight = pos.y;
-    float seaLevelBlendZone = 5.0; // Increased height range for blending
-    
-    // Smooth blend factor: 1.0 at sea level, 0.0 far above/below
-    // Use smoother falloff function
-    float seaLevelDistance = abs(oceanHeight);
-    float blendFactor = exp(-seaLevelDistance / seaLevelBlendZone);
-    
-    // Blend fog color towards original color near ocean surface
-    // This prevents visible seams by matching fog to ocean color at the surface
-    // Use a more gradual blend
-    vec3 surfaceFogColor = mix(color, fogColor, 0.8); // Stronger blend with ocean color
-    fogColor = mix(fogColor, surfaceFogColor, blendFactor * 0.5);
-    
-    // Additional smoothness: reduce fog intensity very close to ocean surface
-    // Use smoother falloff
-    float surfaceProximity = exp(-max(seaLevelDistance, 0.0) / 2.0);
-    fogFactor *= mix(1.0, 0.7, surfaceProximity * 0.4); // More gradual reduction near surface
     
     // Add volumetric light scattering (god rays)
     vec3 volumetricScattering = calculateVolumetricScattering(camPos, pos, rayDir, camPos, sky, time);

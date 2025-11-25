@@ -4,6 +4,24 @@
 // Unified raymarching system - single source of truth for all raymarching
 // Based on: Sphere Tracing (Hart 1996), Distance Field Raymarching
 // ============================================================================
+//
+// MACRO CONTRACT (REQUIRED):
+//   Before using RAYMARCH_SURFACE_CORE or RAYMARCH_VOLUME_CORE macros, you MUST define:
+//     #define getSDF(pos, time) <your_sdf_function>(pos, time)
+//
+//   Signature: float getSDF(vec3 pos, float time)
+//   Returns: Signed distance to nearest surface (positive = outside, negative = inside)
+//
+//   Usage Pattern:
+//     #define getSDF(pos, t) getWaveSDF(pos, t)  // Define macro
+//     VolumeHit hit;
+//     RAYMARCH_SURFACE_CORE(start, dir, maxDist, time, hit);  // Use macro
+//     #undef getSDF  // Clean up macro
+//
+//   Note: This macro is used internally by the raymarching macros, so it must be
+//         defined before calling RAYMARCH_SURFACE_CORE or RAYMARCH_VOLUME_CORE,
+//         not before including this file.
+//
 // This file defines the VolumeHit struct and raymarching algorithm macros
 // Systems define getSDF macro and use RAYMARCH_SURFACE_CORE or RAYMARCH_VOLUME_CORE
 // ============================================================================
@@ -48,9 +66,9 @@ struct VolumeHit {
         for (int i = 0; i < MAX_STEPS; i++) { \
             vec3 pos = start + dir * t; \
             float h = getSDF(pos, time); \
-            if (abs(h) < MIN_DIST * 1.5) { \
+            if (abs(h) < SURFACE_NEAR_THRESHOLD) { \
                 vec3 refinedPos = pos; \
-                if (abs(h) > MIN_DIST * 0.5) { \
+                if (abs(h) > SURFACE_FAR_THRESHOLD) { \
                     float refineStep = h * 0.3; \
                     refinedPos = start + dir * (t - refineStep); \
                     float hRefined = getSDF(refinedPos, time); \
@@ -75,8 +93,8 @@ struct VolumeHit {
                 hit.gradient = vec2(0.0); \
                 break; \
             } \
-            float stepSize = clamp(h * 0.4, MIN_DIST * 0.5, 1.0); \
-            if (abs(h) > abs(prevH) * 1.1 && i > 2) { \
+            float stepSize = clamp(h * 0.4, SURFACE_FAR_THRESHOLD, 1.0); \
+            if (abs(h) > abs(prevH) * STEP_BACKTRACK_THRESHOLD && i > 2) { \
                 stepSize = MIN_DIST; \
             } \
             prevH = h; \
@@ -114,7 +132,7 @@ struct VolumeHit {
                 hit.gradient = vec2(0.0); \
                 break; \
             } \
-            if (t > maxDist || h > 50.0) { \
+            if (t > maxDist || h > VOLUME_MAX_DIST) { \
                 break; \
             } \
             float stepSize = clamp(h * 0.3, STEP_SIZE, 2.0); \
