@@ -72,11 +72,34 @@ struct SurfaceHit {
 
 ### Surface Type Constants
 
+**Generic Surface Types:**
 ```glsl
-const int SURFACE_WATER = 0;
-const int SURFACE_TERRAIN = 1;
-const int SURFACE_OBJECT = 2;
+const int SURFACE_PRIMARY = 0;    // Main surface (water, ground, floor, etc.)
+const int SURFACE_SECONDARY = 1;   // Secondary surface (terrain, floor, etc.)
+const int SURFACE_OBJECT = 2;      // Interactive objects
+const int SURFACE_VOLUME = 3;     // Volumetric surfaces
 ```
+
+**Backward Compatibility:**
+```glsl
+const int SURFACE_WATER = SURFACE_PRIMARY;
+const int SURFACE_TERRAIN = SURFACE_SECONDARY;
+```
+
+**Scene-Specific Extensions:**
+Scenes can extend surface types using helper macros:
+
+```glsl
+// After including RenderPipeline.frag:
+const int SURFACE_UNDERWATER_TERRAIN = SURFACE_SCENE_EXTENSION_BASE + SURFACE_TERRAIN_TYPE(0);
+const int SURFACE_UNDERWATER_OBJECT = SURFACE_SCENE_EXTENSION_BASE + SURFACE_OBJECT_TYPE(0);
+```
+
+**Helper Macros:**
+- `SURFACE_TERRAIN_TYPE(offset)` - Creates terrain-type surface (maps to terrain shading)
+- `SURFACE_OBJECT_TYPE(offset)` - Creates object-type surface (maps to object shading)
+
+See `MACRO_CONTRACTS.md` for complete documentation.
 
 ## Main Function
 

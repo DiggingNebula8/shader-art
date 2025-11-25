@@ -40,8 +40,33 @@ const int SURFACE_OBJECT = 2;     // Interactive objects
 const int SURFACE_VOLUME = 3;     // Volumetric surfaces
 
 // Scene extension base - scenes can define additional types starting from here
-// Example: const int SURFACE_UNDERWATER_TERRAIN = SURFACE_SCENE_EXTENSION_BASE + 0;  // Ocean-specific
+// Use helper macros below to define scene-specific surface types safely
 const int SURFACE_SCENE_EXTENSION_BASE = 4;
+
+// ============================================================================
+// SURFACE TYPE EXTENSION HELPERS
+// ============================================================================
+// Use these macros to define scene-specific surface types safely
+// They ensure correct mapping to shading systems
+//
+// Usage:
+//   SURFACE_TERRAIN_TYPE(0)  // Defines SURFACE_UNDERWATER_TERRAIN = 4 (even = terrain)
+//   SURFACE_OBJECT_TYPE(1)   // Defines SURFACE_UNDERWATER_OBJECT = 5 (odd = object)
+//
+// Example:
+//   const int SURFACE_UNDERWATER_TERRAIN = SURFACE_SCENE_EXTENSION_BASE + SURFACE_TERRAIN_TYPE(0);
+//   const int SURFACE_UNDERWATER_OBJECT = SURFACE_SCENE_EXTENSION_BASE + SURFACE_OBJECT_TYPE(1);
+// ============================================================================
+
+// Helper macro: Define terrain-type surface extension (even offset)
+// Usage: const int SURFACE_MY_TERRAIN = SURFACE_SCENE_EXTENSION_BASE + SURFACE_TERRAIN_TYPE(offset);
+// Note: offset must be even (0, 2, 4, ...) to map to terrain shading
+#define SURFACE_TERRAIN_TYPE(offset) ((offset) * 2)
+
+// Helper macro: Define object-type surface extension (odd offset)
+// Usage: const int SURFACE_MY_OBJECT = SURFACE_SCENE_EXTENSION_BASE + SURFACE_OBJECT_TYPE(offset);
+// Note: offset must be odd (1, 3, 5, ...) to map to object shading
+#define SURFACE_OBJECT_TYPE(offset) ((offset) * 2 + 1)
 
 // Backward compatibility: Map old Ocean-specific names to generic types
 // (Scenes can override these by defining them before including RenderPipeline)
@@ -106,27 +131,26 @@ vec3 composeFinalColor(SurfaceHit hit, RenderContext ctx) {
     
     // Map surface types to shading systems
     // Generic types: SURFACE_PRIMARY, SURFACE_SECONDARY, SURFACE_OBJECT, SURFACE_VOLUME
-    // Scene-specific extensions (>= SURFACE_SCENE_EXTENSION_BASE) are handled generically:
-    //   - Even offsets from SURFACE_SCENE_EXTENSION_BASE map to terrain shading
-    //   - Odd offsets from SURFACE_SCENE_EXTENSION_BASE map to object shading
-    //   This convention allows scenes to define extensions without modifying RenderPipeline
+    // Scene-specific extensions (>= SURFACE_SCENE_EXTENSION_BASE) use helper macros:
+    //   - SURFACE_TERRAIN_TYPE(offset) creates even offsets → terrain shading
+    //   - SURFACE_OBJECT_TYPE(offset) creates odd offsets → object shading
     
     // Helper: Check if surface type uses terrain shading
-    // Includes SURFACE_SECONDARY and even-numbered scene extensions (e.g., SURFACE_UNDERWATER_TERRAIN = 4)
+    // Includes SURFACE_SECONDARY and even-numbered scene extensions
     bool usesTerrainShading = (hit.surfaceType == SURFACE_SECONDARY || hit.surfaceType == SURFACE_TERRAIN);
     if (hit.surfaceType >= SURFACE_SCENE_EXTENSION_BASE) {
         int extensionOffset = hit.surfaceType - SURFACE_SCENE_EXTENSION_BASE;
-        if (extensionOffset % 2 == 0) {  // Even offset = terrain variant
+        if (extensionOffset % 2 == 0) {  // Even offset = terrain variant (from SURFACE_TERRAIN_TYPE)
             usesTerrainShading = true;
         }
     }
     
     // Helper: Check if surface type uses object shading  
-    // Includes SURFACE_OBJECT and odd-numbered scene extensions (e.g., SURFACE_UNDERWATER_OBJECT = 5)
+    // Includes SURFACE_OBJECT and odd-numbered scene extensions
     bool usesObjectShading = (hit.surfaceType == SURFACE_OBJECT);
     if (hit.surfaceType >= SURFACE_SCENE_EXTENSION_BASE) {
         int extensionOffset = hit.surfaceType - SURFACE_SCENE_EXTENSION_BASE;
-        if (extensionOffset % 2 == 1) {  // Odd offset = object variant
+        if (extensionOffset % 2 == 1) {  // Odd offset = object variant (from SURFACE_OBJECT_TYPE)
             usesObjectShading = true;
         }
     }

@@ -14,7 +14,8 @@ Systems/
 │   ├── Common.frag              - Shared utilities, constants, math functions
 │   ├── CameraSystem.frag        - Camera definitions and presets
 │   ├── SkySystem.frag           - Sky/atmosphere rendering
-│   └── VolumeRaymarching.frag  - Core raymarching algorithms
+│   ├── VolumeRaymarching.frag  - Core raymarching algorithms
+│   └── DistanceFieldSystem.frag - Distance field utilities and macros
 │
 ├── Geometry Systems (pure geometry, minimal dependencies)
 │   ├── TerrainSystem.frag       - Terrain height generation
@@ -31,8 +32,7 @@ Systems/
 │   └── WaterInteractionSystem.frag - Water-surface interaction utilities
 │
 └── Pipeline Systems
-    ├── RenderPipeline.frag      - Main rendering orchestration
-    └── DistanceFieldSystem.frag - SDF-based scene representation
+    └── RenderPipeline.frag      - Main rendering orchestration
 ```
 
 ## Naming Conventions
@@ -332,14 +332,15 @@ Add `LavaMaterial` to `MaterialSystem.frag` following the material extension pat
 
 ### Dependency Rules
 
-1. **Core Systems** (`Common.frag`, `SkySystem.frag`) have no dependencies
-2. **Geometry Systems** depend only on `Common.frag`
+1. **Core Systems** (`Common.frag`, `SkySystem.frag`, `CameraSystem.frag`, `VolumeRaymarching.frag`, `DistanceFieldSystem.frag`) have no dependencies
+2. **Geometry Systems** depend only on `Common.frag` (and optionally `VolumeRaymarching.frag` for raymarching wrappers)
 3. **Material Systems** depend only on `Common.frag`
 4. **Shading Systems** depend on:
    - `Common.frag`
    - `MaterialSystem.frag`
    - `SkySystem.frag`
    - Their corresponding geometry system
+   - Optional: Core utility systems (`DistanceFieldSystem.frag`, `VolumeRaymarching.frag`)
    - Optional: Interaction systems
 5. **Interaction Systems** depend on:
    - `Common.frag`
@@ -414,6 +415,7 @@ void main() {
 
 - Document all public functions and structs
 - Include usage examples in comments
+- Document macro contracts (see `MACRO_CONTRACTS.md` for complete reference)
 - Update this architecture document when adding major systems
 
 ### 3. Modularity

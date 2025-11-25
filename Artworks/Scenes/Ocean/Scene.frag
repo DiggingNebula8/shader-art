@@ -213,9 +213,9 @@ float getDepthAlongDirection(vec3 start, vec3 dir, float maxDepth, TerrainParams
 // ============================================================================
 // Ocean scene extends generic surface types with underwater variants
 // Generic types from RenderPipeline: SURFACE_PRIMARY (water), SURFACE_SECONDARY (terrain), SURFACE_OBJECT
-// Ocean-specific extensions (defined after RenderPipeline to use SURFACE_SCENE_EXTENSION_BASE):
-const int SURFACE_UNDERWATER_TERRAIN = SURFACE_SCENE_EXTENSION_BASE + 0;  // Terrain below water surface
-const int SURFACE_UNDERWATER_OBJECT = SURFACE_SCENE_EXTENSION_BASE + 1;   // Object below water surface
+// Ocean-specific extensions using helper macros from RenderPipeline:
+const int SURFACE_UNDERWATER_TERRAIN = SURFACE_SCENE_EXTENSION_BASE + SURFACE_TERRAIN_TYPE(0);  // Terrain below water surface
+const int SURFACE_UNDERWATER_OBJECT = SURFACE_SCENE_EXTENSION_BASE + SURFACE_OBJECT_TYPE(0);    // Object below water surface
 
 // ============================================================================
 // OCEAN SCENE RENDERING FUNCTION
