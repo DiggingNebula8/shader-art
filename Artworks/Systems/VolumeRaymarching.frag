@@ -4,6 +4,24 @@
 // Unified raymarching system - single source of truth for all raymarching
 // Based on: Sphere Tracing (Hart 1996), Distance Field Raymarching
 // ============================================================================
+//
+// MACRO CONTRACT (REQUIRED):
+//   Before using RAYMARCH_SURFACE_CORE or RAYMARCH_VOLUME_CORE macros, you MUST define:
+//     #define getSDF(pos, time) <your_sdf_function>(pos, time)
+//
+//   Signature: float getSDF(vec3 pos, float time)
+//   Returns: Signed distance to nearest surface (positive = outside, negative = inside)
+//
+//   Usage Pattern:
+//     #define getSDF(pos, t) getWaveSDF(pos, t)  // Define macro
+//     VolumeHit hit;
+//     RAYMARCH_SURFACE_CORE(start, dir, maxDist, time, hit);  // Use macro
+//     #undef getSDF  // Clean up macro
+//
+//   Note: This macro is used internally by the raymarching macros, so it must be
+//         defined before calling RAYMARCH_SURFACE_CORE or RAYMARCH_VOLUME_CORE,
+//         not before including this file.
+//
 // This file defines the VolumeHit struct and raymarching algorithm macros
 // Systems define getSDF macro and use RAYMARCH_SURFACE_CORE or RAYMARCH_VOLUME_CORE
 // ============================================================================

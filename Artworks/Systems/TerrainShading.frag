@@ -4,6 +4,29 @@
 // Terrain material properties and shading functions
 // Includes caustics calculation for underwater terrain
 // ============================================================================
+//
+// MACRO CONTRACTS:
+//
+//   OPTIONAL MACROS (have defaults, can be omitted for scenes without water):
+//
+//     TERRAIN_WAVE_HEIGHT(pos, time)
+//       Signature: float TERRAIN_WAVE_HEIGHT(vec2 pos, float time)
+//       Purpose: Get wave height at position (for caustics calculation)
+//       Default: Returns 0.0 if not defined (disables wave-based caustics)
+//       Example: #define TERRAIN_WAVE_HEIGHT(pos, time) getWaveHeight(pos, time)
+//       Note: Required for realistic underwater caustics effects
+//
+//     TERRAIN_WAVE_GRADIENT(pos, time)
+//       Signature: vec2 TERRAIN_WAVE_GRADIENT(vec2 pos, float time)
+//       Purpose: Get wave gradient at position (for caustics focus calculation)
+//       Default: Returns vec2(0.0) if not defined (disables gradient-based caustics)
+//       Example: #define TERRAIN_WAVE_GRADIENT(pos, time) getWaveGradient(pos, time)
+//       Note: Required for realistic underwater caustics effects
+//
+//   Usage:
+//     - Scenes WITH water: Define both macros to enable caustics
+//     - Scenes WITHOUT water: Omit macros (defaults will disable caustics)
+//
 // This system shades terrain surfaces, especially ocean floor with caustics
 // ============================================================================
 
@@ -16,8 +39,7 @@
 #include "TerrainSystem.frag"
 #include "WaterInteractionSystem.frag"
 
-// Wave height/gradient query macros - scenes must define these before including TerrainShading.frag
-// if they want caustics effects. For scenes without water/waves, these default to 0.0/no gradient
+// Wave height/gradient query macros - optional, default to 0.0 for scenes without water
 #ifndef TERRAIN_WAVE_HEIGHT
 #define TERRAIN_WAVE_HEIGHT(pos, time) 0.0
 #endif

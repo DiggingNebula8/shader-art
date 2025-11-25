@@ -4,18 +4,26 @@
 // Generic distance field algorithms and utilities
 // Provides macros and helper functions for working with Signed Distance Functions (SDFs)
 // ============================================================================
+//
+// MACRO CONTRACT (REQUIRED):
+//   Before using DISTANCE_FIELD_RAYMARCH macro, you MUST define:
+//     #define getSDF(pos, time) <your_sdf_function>(pos, time)
+//
+//   Signature: float getSDF(vec3 pos, float time)
+//   Returns: Signed distance to nearest surface (positive = outside, negative = inside)
+//
+//   Example:
+//     #define getSDF(pos, t) length(pos) - 1.0
+//     float dist;
+//     DISTANCE_FIELD_RAYMARCH(start, dir, maxDist, time, dist);
+//
+//   Note: This macro is used internally by DISTANCE_FIELD_RAYMARCH, so it must be
+//         defined before calling the macro, not before including this file.
+//
 // This file contains:
 //   - Generic distance field algorithms and macros
 //   - Multi-SDF combination helpers (union, intersection, smooth min, etc.)
 //   - DistanceFieldInfo structure
-//
-// Usage:
-//   #include "DistanceFieldSystem.frag"
-//   // Define your scene SDF as a macro:
-//   #define getSDF(pos, t) length(pos) - 1.0
-//   // Use the macros:
-//   float dist;
-//   DISTANCE_FIELD_RAYMARCH(start, dir, maxDist, time, dist);
 // ============================================================================
 
 #ifndef DISTANCE_FIELD_SYSTEM_FRAG

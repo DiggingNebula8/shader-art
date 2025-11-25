@@ -6,14 +6,36 @@
 //          Jensen et al. "A Practical Model for Subsurface Light Transport"
 //          "Multiple-Scattering Microfacet BSDFs with the Smith Model"
 // ============================================================================
+//
+// MACRO CONTRACTS:
+//
+//   OPTIONAL MACROS (have defaults, can be omitted):
+//
+//     WATER_TERRAIN_HEIGHT(pos, params)
+//       Signature: float WATER_TERRAIN_HEIGHT(vec2 pos, TerrainParams params)
+//       Purpose: Get terrain height at position (for water depth calculation)
+//       Default: Returns 0.0 if not defined (for scenes without terrain)
+//       Example: #define WATER_TERRAIN_HEIGHT(pos, params) getTerrainHeight(pos, params)
+//
+//     WATER_SHADING_GET_SDF(pos, t, params)
+//       Signature: float WATER_SHADING_GET_SDF(vec3 pos, float t, TerrainParams params)
+//       Purpose: Get scene SDF for translucency calculation (optional feature)
+//       Default: Translucency disabled if not defined
+//       Example: #define WATER_SHADING_GET_SDF(pos, t, params) getSceneSDF(pos, t, params)
+//       Note: Must be defined before calling sampleTranslucency() or calculateRefractedColor()
+//
+//   RUNTIME MACROS (must be defined before using specific functions):
+//
+//     getSDF(pos, time) - Required by sampleTranslucency() if WATER_SHADING_GET_SDF is defined
+//       Signature: float getSDF(vec3 pos, float time)
+//       Purpose: Used internally by DISTANCE_FIELD_RAYMARCH for translucency
+//       Note: This is automatically defined from WATER_SHADING_GET_SDF if provided
+//
 // Dependencies:
 //   - WaveSystem: For wave height/gradient queries (getWaveHeight, getWaveGradient)
 //   - VolumeRaymarching: For terrain raymarching (raymarchTerrain)
 //   - DistanceFieldSystem: For distance field algorithms and macros
-//     Note: This file uses DISTANCE_FIELD_RAYMARCH macro which requires getSDF(pos, time) macro
-//           to be defined. Scenes should define getSceneSDF() and use it via macro.
-//   - Terrain height queries: Uses macro WATER_TERRAIN_HEIGHT(pos, params) instead of direct include
-//     Scenes must define this macro before including WaterShading.frag
+//   - TerrainSystem: Included only for TerrainParams type definition
 // ============================================================================
 
 #ifndef WATER_SHADING_FRAG
@@ -29,16 +51,10 @@
 // Functions are accessed via WATER_TERRAIN_HEIGHT macro instead
 #include "TerrainSystem.frag"
 
-// Terrain height query macro - scenes must define this before including WaterShading.frag
-// Default: returns 0.0 if not defined (for scenes without terrain)
-// Note: Even with TerrainSystem included for types, we use this macro to avoid tight coupling
+// Terrain height query macro - optional, defaults to 0.0 for scenes without terrain
 #ifndef WATER_TERRAIN_HEIGHT
 #define WATER_TERRAIN_HEIGHT(pos, params) 0.0
 #endif
-
-// Note: sampleTranslucency() uses DISTANCE_FIELD_RAYMARCH macro which requires
-// getSDF(pos, time) macro to be defined. Scenes should define getSceneSDF() and
-// create a macro wrapper before calling sampleTranslucency().
 
 // ============================================================================
 // WATER PROPERTIES
