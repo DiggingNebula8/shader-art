@@ -67,10 +67,10 @@ Creates default terrain configuration.
 
 ---
 
-### `TerrainParams createDefaultOceanFloor()`
-Creates low-poly, flat terrain optimized for ocean floor.
+### `TerrainParams createFlatTerrain()`
+Creates low-poly, flat terrain with minimal height variation.
 
-**Returns:** `TerrainParams` configured for ocean floor:
+**Returns:** `TerrainParams` configured for flat terrain:
 - Base height: -105.0
 - Height variation: 2.0
 - Single octave (low detail)
@@ -134,7 +134,7 @@ Returns the height of the terrain at a given 2D position.
 
 **Example:**
 ```glsl
-TerrainParams params = createDefaultOceanFloor();
+TerrainParams params = createFlatTerrain();
 float height = getTerrainHeight(vec2(10.0, 5.0), params);
 ```
 
@@ -288,7 +288,7 @@ Defined in the system:
 ```glsl
 #include "TerrainSystem.frag"
 
-TerrainParams params = createDefaultOceanFloor();
+TerrainParams params = createFlatTerrain();
 float height = getTerrainHeight(vec2(0.0, 0.0), params);
 ```
 
@@ -315,7 +315,7 @@ vec3 normal = getTerrainNormal(pos, params);
 #include "TerrainSystem.frag"
 #include "VolumeRaymarching.frag"
 
-TerrainParams params = createDefaultOceanFloor();
+TerrainParams params = createFlatTerrain();
 VolumeHit hit = raymarchTerrain(camPos, rayDir, 150.0, time, params);
 if (hit.hit && hit.valid) {
     vec3 normal = hit.normal;  // Already computed

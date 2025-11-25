@@ -114,7 +114,7 @@ ctx.cameraPos = cam.position;
 ctx.rayDir = rayDir;
 ctx.time = iTime;
 ctx.sky = createSkyPreset_ClearDay();
-ctx.terrainParams = createDefaultOceanFloor();
+ctx.terrainParams = createFlatTerrain();
 ctx.camera = cam;
 ctx.waterMaterial = waterMaterial;
 ctx.terrainMaterial = terrainMaterial;
@@ -234,7 +234,7 @@ The Render Pipeline coordinates systems in this order:
 #include "SkySystem.frag"
 
 SkyAtmosphere sky = createSkyPreset_ClearDay();
-TerrainParams terrain = createDefaultOceanFloor();
+TerrainParams terrain = createFlatTerrain();
 WaterMaterial waterMaterial = createDefaultWaterMaterial();
 TerrainMaterial terrainMaterial = createDefaultTerrainMaterial();
 
