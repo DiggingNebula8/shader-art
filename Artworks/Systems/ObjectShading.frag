@@ -11,6 +11,7 @@
 #include "Common.frag"
 #include "MaterialSystem.frag"
 #include "SkySystem.frag"
+#include "WaterInteractionSystem.frag"
 
 // ============================================================================
 // OBJECT SHADING PARAMETERS STRUCT
@@ -39,108 +40,8 @@ struct ObjectShadingParams {
 // ============================================================================
 // OBJECT WATER INTERACTION EFFECTS
 // ============================================================================
-
-// Calculate water contact line intensity (where water meets object)
-float calculateWaterContactLine(vec3 pos, vec3 normal, vec3 waterSurfacePos, vec3 waterNormal, float time) {
-    // Distance to water surface
-    float distToWater = length(pos - waterSurfacePos);
-    
-    // Check if point is near water line (vertical distance matters most)
-    float verticalDist = abs(pos.y - waterSurfacePos.y);
-    float horizontalDist = length((pos - waterSurfacePos).xz);
-    
-    // Contact line is strongest where vertical distance is small
-    float contactFactor = 1.0 - smoothstep(0.0, 0.3, verticalDist);
-    
-    // Add wave-based variation for dynamic contact line
-    float waveVariation = sin(dot(pos.xz, vec2(1.0, 0.5)) * 2.0 + time * 2.0) * 0.1 + 0.9;
-    contactFactor *= waveVariation;
-    
-    // Fade out with horizontal distance (water spreads outward)
-    contactFactor *= 1.0 - smoothstep(0.0, 1.5, horizontalDist);
-    
-    return contactFactor;
-}
-
-// Apply enhanced wet surface effect with realistic water interaction
-vec3 applyObjectWetEffect(vec3 baseColor, vec3 pos, vec3 normal, vec3 waterSurfacePos, vec3 waterNormal, float time, vec3 viewDir, vec3 sunDir, vec3 sunColor, float sunIntensity) {
-    float distToWater = length(pos - waterSurfacePos);
-    float verticalDist = abs(pos.y - waterSurfacePos.y);
-    
-    // Wetness factor: stronger near water line, especially below it
-    float wetnessFactor = 1.0 - smoothstep(0.0, 1.5, verticalDist);
-    
-    // Water contact line effect (foam/white line where water meets object)
-    float contactLine = calculateWaterContactLine(pos, normal, waterSurfacePos, waterNormal, time);
-    vec3 contactLineColor = vec3(0.95, 0.98, 1.0) * contactLine * 0.4;
-    
-    // Enhanced wet surface appearance
-    // Wet surfaces are darker and more reflective
-    vec3 wetColor = baseColor * 0.65; // Darker when wet
-    
-    // Add realistic wet reflection (specular highlight)
-    float NdotV = max(dot(normal, viewDir), 0.0);
-    float NdotL = max(dot(normal, sunDir), 0.0);
-    
-    // Wet surfaces have stronger specular reflection
-    if (sunDir.y > 0.0 && NdotL > 0.0) {
-        vec3 halfDir = normalize(viewDir + sunDir);
-        float NdotH = max(dot(normal, halfDir), 0.0);
-        float wetSpecular = pow(NdotH, 64.0) * wetnessFactor * 0.5;
-        wetColor += sunColor * sunIntensity * wetSpecular;
-    }
-    
-    // Add water droplet effect (small highlights)
-    float dropletNoise = smoothNoise(pos.xz * 5.0 + time * 0.1);
-    float dropletFactor = smoothstep(0.6, 0.9, dropletNoise) * wetnessFactor * 0.2;
-    wetColor += vec3(dropletFactor);
-    
-    // Blend between dry and wet color
-    vec3 finalColor = mix(baseColor, wetColor, wetnessFactor * 0.7);
-    
-    // Add contact line
-    finalColor += contactLineColor;
-    
-    return finalColor;
-}
-
-// Apply enhanced underwater visual effects to objects
-vec3 applyObjectUnderwaterEffect(vec3 baseColor, float waterDepth, vec3 viewDir, vec3 sunDir, vec3 sunColor, float sunIntensity, WaterMaterial waterMaterial) {
-    // Underwater color tinting (water absorbs red wavelengths more)
-    vec3 underwaterTint = mix(waterMaterial.shallowWaterColor, waterMaterial.deepWaterColor, 
-                              1.0 - exp(-waterDepth * 0.05));
-    
-    // Apply absorption (more depth = more absorption)
-    vec3 absorption = exp(-waterMaterial.absorption * waterDepth);
-    baseColor *= absorption;
-    
-    // Enhanced tinting - stronger color shift underwater
-    baseColor = mix(baseColor, baseColor * underwaterTint, 0.5);
-    
-    // Reduce overall brightness underwater (more realistic falloff)
-    float brightnessFactor = 1.0 - exp(-waterDepth * 0.02);
-    baseColor *= (1.0 - brightnessFactor * 0.6);
-    
-    // Enhanced volumetric fog effect with depth variation
-    float fogDensity = 1.0 - exp(-waterDepth * 0.03);
-    vec3 fogColor = underwaterTint * 0.25;
-    
-    // Add depth-based fog variation (more fog at depth)
-    float depthFogVariation = smoothstep(5.0, 30.0, waterDepth);
-    fogDensity *= (0.7 + depthFogVariation * 0.3);
-    
-    baseColor = mix(baseColor, fogColor, fogDensity * 0.4);
-    
-    // Add caustics-like light patterns (simplified - full caustics handled by terrain)
-    if (sunDir.y > 0.0) {
-        float causticPattern = sin(dot(viewDir.xz, vec2(1.0, 0.5)) * 5.0) * 0.5 + 0.5;
-        float causticIntensity = pow(causticPattern, 2.0) * (1.0 - exp(-waterDepth * 0.1));
-        vec3 causticLight = sunColor * sunIntensity * causticIntensity * 0.1;
-        baseColor += causticLight * (1.0 - fogDensity * 0.5);
-    }
-    
-    return baseColor;
-}
+// Uses WaterInteractionSystem for common water interaction effects
+// Object-specific customization is handled via WaterInteractionParams
 
 // ============================================================================
 // OBJECT SHADING
@@ -179,17 +80,28 @@ vec3 shadeObject(ObjectShadingParams params) {
     // Combine
     vec3 color = ambient + diffuse + specularColor + fresnelColor;
     
-    // Apply water interaction effects if applicable
-    if (params.isWet) {
-        color = applyObjectWetEffect(color, params.pos, params.normal, params.waterSurfacePos, 
-                                     params.waterNormal, params.time, params.viewDir, 
-                                     lightDir, lightColor, params.light.sunIntensity);
-    }
-    
-    if (params.waterDepth > 0.0) {
-        color = applyObjectUnderwaterEffect(color, params.waterDepth, params.viewDir, 
-                                           lightDir, lightColor, params.light.sunIntensity, 
-                                           params.waterMaterial);
+    // Apply water interaction effects using WaterInteractionSystem
+    if (params.isWet || params.waterDepth > 0.0) {
+        WaterInteractionParams interactionParams = createObjectWaterInteractionParams();
+        interactionParams.pos = params.pos;
+        interactionParams.normal = params.normal;
+        interactionParams.waterSurfacePos = params.waterSurfacePos;
+        interactionParams.waterNormal = params.waterNormal;
+        interactionParams.waterDepth = params.waterDepth;
+        interactionParams.time = params.time;
+        interactionParams.viewDir = params.viewDir;
+        interactionParams.sunDir = lightDir;
+        interactionParams.sunColor = lightColor;
+        interactionParams.sunIntensity = params.light.sunIntensity;
+        interactionParams.waterMaterial = params.waterMaterial;
+        
+        if (params.isWet) {
+            color = applyWetSurfaceEffect(color, interactionParams);
+        }
+        
+        if (params.waterDepth > 0.0) {
+            color = applyUnderwaterEffect(color, interactionParams);
+        }
     }
     
     return color;

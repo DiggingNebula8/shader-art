@@ -15,6 +15,7 @@
 #include "SkySystem.frag"
 #include "TerrainSystem.frag"
 #include "WaveSystem.frag"
+#include "WaterInteractionSystem.frag"
 
 // ============================================================================
 // TERRAIN SHADING PARAMETERS STRUCT
@@ -127,107 +128,9 @@ vec3 calculateCaustics(vec3 floorPos, vec3 waterSurfacePos, vec3 waterNormal, ve
 // ============================================================================
 // TERRAIN WATER INTERACTION EFFECTS
 // ============================================================================
-
-// Calculate water contact line for terrain (beach/water edge)
-float calculateTerrainWaterContactLine(vec3 pos, vec3 waterSurfacePos, float time) {
-    float verticalDist = abs(pos.y - waterSurfacePos.y);
-    float horizontalDist = length((pos - waterSurfacePos).xz);
-    
-    // Contact line is strongest at water level
-    float contactFactor = 1.0 - smoothstep(0.0, 0.2, verticalDist);
-    
-    // Add wave-based foam variation
-    float wavePhase = dot(pos.xz, vec2(0.5, 0.866)) * 3.0 + time * 2.0;
-    float waveVariation = sin(wavePhase) * 0.15 + 0.85;
-    contactFactor *= waveVariation;
-    
-    // Foam spreads slightly above water line
-    float foamSpread = 1.0 - smoothstep(0.0, 0.5, verticalDist);
-    contactFactor = max(contactFactor, foamSpread * 0.3);
-    
-    // Fade with horizontal distance
-    contactFactor *= 1.0 - smoothstep(0.0, 2.0, horizontalDist);
-    
-    return contactFactor;
-}
-
-// Apply enhanced wet surface effect to terrain near water line
-vec3 applyTerrainWetEffect(vec3 baseColor, vec3 pos, vec3 normal, vec3 waterSurfacePos, vec3 waterNormal, float time, vec3 viewDir, vec3 sunDir, vec3 sunColor, float sunIntensity) {
-    float verticalDist = abs(pos.y - waterSurfacePos.y);
-    float horizontalDist = length((pos - waterSurfacePos).xz);
-    
-    // Wetness factor: stronger near water line
-    float wetnessFactor = 1.0 - smoothstep(0.0, 1.5, verticalDist);
-    
-    // Water contact line (foam/white edge where water meets terrain)
-    float contactLine = calculateTerrainWaterContactLine(pos, waterSurfacePos, time);
-    vec3 contactLineColor = vec3(0.95, 0.98, 1.0) * contactLine * 0.5;
-    
-    // Enhanced wet terrain appearance
-    vec3 wetColor = baseColor * 0.7; // Darker when wet
-    
-    // Add realistic wet reflection
-    float NdotV = max(dot(normal, viewDir), 0.0);
-    float NdotL = max(dot(normal, sunDir), 0.0);
-    
-    if (sunDir.y > 0.0 && NdotL > 0.0) {
-        vec3 halfDir = normalize(viewDir + sunDir);
-        float NdotH = max(dot(normal, halfDir), 0.0);
-        float wetSpecular = pow(NdotH, 32.0) * wetnessFactor * 0.4;
-        wetColor += sunColor * sunIntensity * wetSpecular;
-    }
-    
-    // Add sand/soil texture variation when wet
-    float textureNoise = smoothNoise(pos.xz * 2.0 + time * 0.05);
-    float textureVariation = textureNoise * wetnessFactor * 0.1;
-    wetColor += vec3(textureVariation);
-    
-    // Blend between dry and wet color
-    vec3 finalColor = mix(baseColor, wetColor, wetnessFactor * 0.7);
-    
-    // Add contact line (foam)
-    finalColor += contactLineColor;
-    
-    return finalColor;
-}
-
-// Apply enhanced underwater visual effects to terrain
-vec3 applyTerrainUnderwaterEffect(vec3 baseColor, float waterDepth, vec3 viewDir, vec3 sunDir, vec3 sunColor, float sunIntensity, WaterMaterial waterMaterial) {
-    // Underwater color tinting (water absorbs red wavelengths more)
-    vec3 underwaterTint = mix(waterMaterial.shallowWaterColor, waterMaterial.deepWaterColor, 
-                              1.0 - exp(-waterDepth * 0.05));
-    
-    // Apply absorption (more depth = more absorption)
-    vec3 absorption = exp(-waterMaterial.absorption * waterDepth);
-    baseColor *= absorption;
-    
-    // Enhanced tinting - stronger color shift underwater
-    baseColor = mix(baseColor, baseColor * underwaterTint, 0.5);
-    
-    // Reduce overall brightness underwater (more realistic falloff)
-    float brightnessFactor = 1.0 - exp(-waterDepth * 0.02);
-    baseColor *= (1.0 - brightnessFactor * 0.6);
-    
-    // Enhanced volumetric fog effect with depth variation
-    float fogDensity = 1.0 - exp(-waterDepth * 0.03);
-    vec3 fogColor = underwaterTint * 0.25;
-    
-    // Add depth-based fog variation (more fog at depth)
-    float depthFogVariation = smoothstep(5.0, 30.0, waterDepth);
-    fogDensity *= (0.7 + depthFogVariation * 0.3);
-    
-    baseColor = mix(baseColor, fogColor, fogDensity * 0.4);
-    
-    // Add subtle light scattering effect (caustics are handled separately)
-    if (sunDir.y > 0.0) {
-        float scatterPattern = sin(dot(viewDir.xz, vec2(0.707, 0.707)) * 4.0) * 0.5 + 0.5;
-        float scatterIntensity = pow(scatterPattern, 1.5) * (1.0 - exp(-waterDepth * 0.08));
-        vec3 scatterLight = sunColor * sunIntensity * scatterIntensity * 0.08;
-        baseColor += scatterLight * (1.0 - fogDensity * 0.6);
-    }
-    
-    return baseColor;
-}
+// Uses WaterInteractionSystem for common water interaction effects
+// Terrain-specific customization is handled via WaterInteractionParams
+// Note: Caustics calculation remains terrain-specific (uses WaveSystem)
 
 // ============================================================================
 // TERRAIN SHADING
@@ -268,16 +171,28 @@ vec3 shadeTerrain(TerrainShadingParams params) {
     
     vec3 color = ambient + diffuse + specular + caustics;
     
-    // Apply water interaction effects if applicable
-    if (params.isWet) {
-        color = applyTerrainWetEffect(color, params.pos, params.normal, params.waterSurfacePos, 
-                                     params.waterNormal, params.time, params.viewDir, 
-                                     sunDir, sunColor, sunIntensity);
-    }
-    
-    if (params.waterDepth > 0.0) {
-        color = applyTerrainUnderwaterEffect(color, params.waterDepth, params.viewDir, 
-                                            sunDir, sunColor, sunIntensity, params.waterMaterial);
+    // Apply water interaction effects using WaterInteractionSystem
+    if (params.isWet || params.waterDepth > 0.0) {
+        WaterInteractionParams interactionParams = createTerrainWaterInteractionParams();
+        interactionParams.pos = params.pos;
+        interactionParams.normal = params.normal;
+        interactionParams.waterSurfacePos = params.waterSurfacePos;
+        interactionParams.waterNormal = params.waterNormal;
+        interactionParams.waterDepth = params.waterDepth;
+        interactionParams.time = params.time;
+        interactionParams.viewDir = params.viewDir;
+        interactionParams.sunDir = sunDir;
+        interactionParams.sunColor = sunColor;
+        interactionParams.sunIntensity = sunIntensity;
+        interactionParams.waterMaterial = params.waterMaterial;
+        
+        if (params.isWet) {
+            color = applyWetSurfaceEffect(color, interactionParams);
+        }
+        
+        if (params.waterDepth > 0.0) {
+            color = applyUnderwaterEffect(color, interactionParams);
+        }
     }
     
     return color;
