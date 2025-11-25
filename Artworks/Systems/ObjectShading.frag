@@ -90,8 +90,8 @@ vec3 shadeObject(ObjectShadingParams params) {
         interactionParams.waterDepth = params.waterDepth;
         interactionParams.time = params.time;
         interactionParams.viewDir = params.viewDir;
-        interactionParams.sunDir = lightDir;
-        interactionParams.sunColor = lightColor;
+        interactionParams.sunDir = params.light.sunDirection;
+        interactionParams.sunColor = params.light.sunColor;
         interactionParams.sunIntensity = params.light.sunIntensity;
         interactionParams.waterMaterial = params.waterMaterial;
         
