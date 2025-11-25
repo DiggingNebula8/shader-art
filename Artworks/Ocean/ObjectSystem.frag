@@ -50,7 +50,8 @@ float opSmoothUnion(float d1, float d2, float k) {
 
 // Subtraction
 float opSubtraction(float d1, float d2) {
-    return max(-d1, d2);
+    // Standard CSG difference: A - B
+    return max(d1, -d2);
 }
 
 // ============================================================================
