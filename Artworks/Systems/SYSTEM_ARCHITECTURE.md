@@ -10,28 +10,26 @@ The system is organized into modular, reusable components:
 
 ```
 Systems/
-├── Core Systems (no dependencies)
+├── CoreSystems (no dependencies)
 │   ├── Common.frag              - Shared utilities, constants, math functions
 │   ├── CameraSystem.frag        - Camera definitions and presets
 │   ├── SkySystem.frag           - Sky/atmosphere rendering
 │   ├── VolumeRaymarching.frag  - Core raymarching algorithms
 │   └── DistanceFieldSystem.frag - Distance field utilities and macros
 │
-├── Geometry Systems (pure geometry, minimal dependencies)
+├── GeometrySystems (pure geometry, minimal dependencies)
 │   ├── TerrainSystem.frag       - Terrain height generation
 │   ├── WaveSystem.frag          - Water wave geometry
 │   └── ObjectSystem.frag       - Object distance fields
 │
-├── Material & Shading Systems
+├── MaterialShading
 │   ├── MaterialSystem.frag     - Material definitions and presets
 │   ├── WaterShading.frag        - Water surface shading
 │   ├── TerrainShading.frag     - Terrain surface shading
-│   └── ObjectShading.frag      - Object surface shading
-│
-├── Interaction Systems (utility libraries)
+│   ├── ObjectShading.frag      - Object surface shading
 │   └── WaterInteractionSystem.frag - Water-surface interaction utilities
 │
-└── Pipeline Systems
+└── Pipeline
     └── RenderPipeline.frag      - Main rendering orchestration
 ```
 
@@ -364,8 +362,8 @@ Add `LavaMaterial` to `MaterialSystem.frag` following the material extension pat
 
 ### Dependency Rules
 
-1. **Core Systems** (`Common.frag`, `SkySystem.frag`, `CameraSystem.frag`, `VolumeRaymarching.frag`, `DistanceFieldSystem.frag`) have no dependencies
-2. **Geometry Systems** depend only on `Common.frag` (and optionally `VolumeRaymarching.frag` for raymarching wrappers)
+1. **CoreSystems** (`Common.frag`, `SkySystem.frag`, `CameraSystem.frag`, `VolumeRaymarching.frag`, `DistanceFieldSystem.frag`) have no dependencies
+2. **GeometrySystems** depend only on `Common.frag` (and optionally `VolumeRaymarching.frag` for raymarching wrappers)
 3. **Material Systems** depend only on `Common.frag`
 4. **Shading Systems** depend on:
    - `Common.frag`
@@ -599,7 +597,7 @@ The architecture supports adding:
 
 - **Surface Types**: Snow, Lava, Ice, Sand, Mud, etc.
 - **Interaction Systems**: Fire interaction, Wind interaction, Erosion, etc.
-- **Geometry Systems**: Clouds, Foliage, Buildings, etc.
+- **GeometrySystems**: Clouds, Foliage, Buildings, etc.
 - **Material Variants**: More presets for existing materials
 - **Shading Effects**: Caustics for other surfaces, volumetric effects, etc.
 

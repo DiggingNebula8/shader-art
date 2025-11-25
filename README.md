@@ -109,27 +109,27 @@ Load the scene in your GLSL environment. For a complete guide, see [Creating a N
 ### System Documentation
 
 - [System Architecture](Artworks/Systems/SYSTEM_ARCHITECTURE.md) - Architecture overview and extension patterns
-- [Render Pipeline](Artworks/Systems/RENDER_PIPELINE.md) - Main rendering orchestration API
+- [Render Pipeline](Artworks/Systems/Pipeline/RENDER_PIPELINE.md) - Main rendering orchestration API
 - [Macro Contracts](Artworks/Systems/MACRO_CONTRACTS.md) - System integration via macros
 
 ### Core Systems
 
-- [Wave System](Artworks/Systems/WAVE_SYSTEM.md) - Ocean wave geometry based on Tessendorf's algorithm
-- [Terrain System](Artworks/Systems/TERRAIN_SYSTEM.md) - Procedural terrain with multi-scale noise
-- [Sky System](Artworks/Systems/SKY_SYSTEM.md) - Atmospheric scattering, sun/moon, stars, clouds
-- [Camera System](Artworks/Systems/CAMERA_SYSTEM.md) - Physically-based camera controls
-- [Material System](Artworks/Systems/MATERIAL_SYSTEM.md) - Material definitions and presets
+- [Wave System](Artworks/Systems/GeometrySystems/WAVE_SYSTEM.md) - Ocean wave geometry based on Tessendorf's algorithm
+- [Terrain System](Artworks/Systems/GeometrySystems/TERRAIN_SYSTEM.md) - Procedural terrain with multi-scale noise
+- [Sky System](Artworks/Systems/CoreSystems/SKY_SYSTEM.md) - Atmospheric scattering, sun/moon, stars, clouds
+- [Camera System](Artworks/Systems/CoreSystems/CAMERA_SYSTEM.md) - Physically-based camera controls
+- [Material System](Artworks/Systems/MaterialShading/MATERIAL_SYSTEM.md) - Material definitions and presets
 
 ### Shading Systems
 
-- [Water Shading](Artworks/Systems/WATER_SHADING.md) - PBR water rendering with refraction/reflection
-- [Terrain Shading](Artworks/Systems/TERRAIN_SHADING.md) - Terrain shading with underwater caustics
-- [Water Interaction](Artworks/Systems/WATER_INTERACTION_SYSTEM.md) - Water-surface interaction utilities
+- [Water Shading](Artworks/Systems/MaterialShading/WATER_SHADING.md) - PBR water rendering with refraction/reflection
+- [Terrain Shading](Artworks/Systems/MaterialShading/TERRAIN_SHADING.md) - Terrain shading with underwater caustics
+- [Water Interaction](Artworks/Systems/MaterialShading/WATER_INTERACTION_SYSTEM.md) - Water-surface interaction utilities
 
 ### Technical Documentation
 
-- [Volume Raymarching](Artworks/Systems/VOLUME_RAYMARCHING.md) - Core raymarching algorithms
-- [Distance Field System](Artworks/Systems/DISTANCE_FIELD_SYSTEM.md) - SDF utilities and macros
+- [Volume Raymarching](Artworks/Systems/CoreSystems/VOLUME_RAYMARCHING.md) - Core raymarching algorithms
+- [Distance Field System](Artworks/Systems/CoreSystems/DISTANCE_FIELD_SYSTEM.md) - SDF utilities and macros
 
 ## Available Presets
 

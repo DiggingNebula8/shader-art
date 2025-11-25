@@ -233,7 +233,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
 
 ## Available Systems
 
-### Geometry Systems
+### GeometrySystems
 
 #### WaveSystem
 - **Purpose:** Ocean wave geometry
@@ -409,7 +409,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
 #define TERRAIN_WAVE_HEIGHT(pos, time) getWaveHeight(pos, time)
 #define TERRAIN_WAVE_GRADIENT(pos, time) getWaveGradient(pos, time)
 
-#include "../../Systems/WaterShading.frag"
+#include "../../Systems/MaterialShading/WaterShading.frag"
 #include "../../Systems/MaterialShading/TerrainShading.frag"
 #include "../../Systems/CoreSystems/SkySystem.frag"
 #include "../../Systems/Pipeline/RenderPipeline.frag"
@@ -568,19 +568,19 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
 
 For detailed information on each system, see:
 
-- `SYSTEM_ARCHITECTURE.md` - Overall architecture and extension patterns
-- `MACRO_CONTRACTS.md` - Complete macro contract documentation
-- `RENDER_PIPELINE.md` - Render pipeline API documentation
-- `WAVE_SYSTEM.md` - Wave system documentation
-- `TERRAIN_SYSTEM.md` - Terrain system documentation
-- `SKY_SYSTEM.md` - Sky system documentation
-- `MATERIAL_SYSTEM.md` - Material system documentation
-- `CAMERA_SYSTEM.md` - Camera system documentation
+- `Artworks/Systems/SYSTEM_ARCHITECTURE.md` - Overall architecture and extension patterns
+- `Artworks/Systems/MACRO_CONTRACTS.md` - Complete macro contract documentation
+- `Artworks/Systems/Pipeline/RENDER_PIPELINE.md` - Render pipeline API documentation
+- `Artworks/Systems/GeometrySystems/WAVE_SYSTEM.md` - Wave system documentation
+- `Artworks/Systems/GeometrySystems/TERRAIN_SYSTEM.md` - Terrain system documentation
+- `Artworks/Systems/CoreSystems/SKY_SYSTEM.md` - Sky system documentation
+- `Artworks/Systems/MaterialShading/MATERIAL_SYSTEM.md` - Material system documentation
+- `Artworks/Systems/CoreSystems/CAMERA_SYSTEM.md` - Camera system documentation
 
 ## Getting Help
 
 1. Check the example scene: `Artworks/Scenes/Ocean/Scene.frag`
 2. Review system documentation files in `Artworks/Systems/`
-3. Check macro contracts in `MACRO_CONTRACTS.md`
-4. Review architecture patterns in `SYSTEM_ARCHITECTURE.md`
+3. Check macro contracts in `Artworks/Systems/MACRO_CONTRACTS.md`
+4. Review architecture patterns in `Artworks/Systems/SYSTEM_ARCHITECTURE.md`
 
