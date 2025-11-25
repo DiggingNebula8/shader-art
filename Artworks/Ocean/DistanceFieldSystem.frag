@@ -59,26 +59,27 @@ struct DistanceFieldInfo {
             vec3 pos = start + dir * t; \
             float d = getSDF(pos, time); \
             if (d < MIN_DIST * 2.0) { \
-                float refineT = t; \
-                float refineStep = d * 0.5; \
-                for (int j = 0; j < 3; j++) { \
-                    refineT = max(0.0, refineT - refineStep); \
-                    vec3 refinePos = start + dir * refineT; \
-                    float refineD = getSDF(refinePos, time); \
-                    if (refineD < MIN_DIST) { \
-                        refineStep *= 0.5; \
+                /* Binary search refinement */ \
+                float tMin = max(0.0, t - d); \
+                float tMax = t; \
+                for (int j = 0; j < 5; j++) { \
+                    float tMid = (tMin + tMax) * 0.5; \
+                    vec3 refinePos = start + dir * tMid; \
+                    float dMid = getSDF(refinePos, time); \
+                    if (dMid < MIN_DIST) { \
+                        tMax = tMid; \
                     } else { \
-                        refineStep *= -0.5; \
+                        tMin = tMid; \
                     } \
                 } \
-                dist = refineT; \
+                dist = (tMin + tMax) * 0.5; \
                 break; \
             } \
             if (d > 100.0 || t > maxDist) { \
                 dist = maxDist; \
                 break; \
             } \
-            float stepSize = clamp(d * 0.6, MIN_STEP, MAX_STEP); \
+            float stepSize = clamp(d * 0.8, MIN_STEP, MAX_STEP); \
             if (d > prevDist * 1.5 && i > 2) { \
                 stepSize = MIN_STEP; \
             } \
