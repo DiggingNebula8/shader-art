@@ -104,9 +104,9 @@ float smoothMinSDF(float d1, float d2, float k) {
 }
 
 // Smooth maximum - combines two SDFs with smooth blending (for intersection)
+// Uses identity: smoothMax(d1, d2, k) = -smoothMin(-d1, -d2, k)
 float smoothMaxSDF(float d1, float d2, float k) {
-    float h = clamp(0.5 + 0.5 * (d2 - d1) / k, 0.0, 1.0);
-    return mix(d2, d1, h) + k * h * (1.0 - h);
+    return -smoothMinSDF(-d1, -d2, k);
 }
 
 // Union - combines two SDFs (minimum)
@@ -150,8 +150,8 @@ vec3 getSceneNormal(vec3 pos, float time, TerrainParams terrainParams) {
     float terrainDist = getTerrainSDF(pos, terrainParams);
     float objectDist = getBuoySDF(pos, time);
     
-    // Return normal of closest surface
-    if (abs(terrainDist) < abs(objectDist)) {
+    // Return normal of closest surface (choose based on actual distance, not abs)
+    if (terrainDist < objectDist) {
         return getTerrainNormal(pos, terrainParams);
     } else {
         return getBuoyNormal(pos, time);
