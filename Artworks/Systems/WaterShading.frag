@@ -811,7 +811,8 @@ WaterLightingResult calculateWaterLighting(vec3 pos, vec3 normal, vec3 viewDir, 
     }
     
     // Add sun glints (specular highlights)
-    vec3 sunGlints = calculateSunGlints(normal, viewDir, lightDir, lightColor, light.sunIntensity, result.dynamicRoughness, time, pos.xz);
+    // Note: Pass raw sunColor (not lightColor) since calculateSunGlints multiplies by sunIntensity internally
+    vec3 sunGlints = calculateSunGlints(normal, viewDir, lightDir, light.sunColor, light.sunIntensity, result.dynamicRoughness, time, pos.xz);
     
     // Calculate and add foam
     float waveHeight = getWaveHeight(pos.xz, time);
@@ -829,8 +830,9 @@ WaterLightingResult calculateWaterLighting(vec3 pos, vec3 normal, vec3 viewDir, 
     
     // Apply underwater fog/volumetric scattering for realistic depth perception
     // Only apply if we're looking into water (view direction goes into water)
+    // Note: Pass raw sunColor (not lightColor) since calculateUnderwaterFog multiplies by sunIntensity internally
     if (dot(viewDir, normal) < 0.0) {
-        finalColor = calculateUnderwaterFog(finalColor, depthInfo.depth, viewDir, lightDir, lightColor, light.sunIntensity, material);
+        finalColor = calculateUnderwaterFog(finalColor, depthInfo.depth, viewDir, lightDir, light.sunColor, light.sunIntensity, material);
     }
     
     result.color = finalColor;
