@@ -50,6 +50,7 @@ struct DistanceFieldInfo {
 #define DISTANCE_FIELD_RAYMARCH(start, dir, maxDist, time, dist) \
     do { \
         dist = maxDist; /* default: no hit within maxDist */ \
+        bool foundHit = false; \
         float t = 0.0; \
         const float MIN_STEP = 0.1; \
         const float MAX_STEP = 2.0; \
@@ -58,7 +59,7 @@ struct DistanceFieldInfo {
         for (int i = 0; i < MAX_STEPS; i++) { \
             vec3 pos = start + dir * t; \
             float d = getSDF(pos, time); \
-            if (d < MIN_DIST * 2.0) { \
+            if (d < REFINEMENT_THRESHOLD) { \
                 /* Binary search refinement */ \
                 float tMin = max(0.0, t - d); \
                 float tMax = t; \
@@ -73,20 +74,23 @@ struct DistanceFieldInfo {
                     } \
                 } \
                 dist = (tMin + tMax) * 0.5; \
+                foundHit = true; \
                 break; \
             } \
-            if (d > 100.0 || t > maxDist) { \
+            if (d > DISTANCE_FIELD_MAX_DIST || t > maxDist) { \
                 dist = maxDist; \
+                foundHit = false; \
                 break; \
             } \
             float stepSize = clamp(d * 0.8, MIN_STEP, MAX_STEP); \
-            if (d > prevDist * 1.5 && i > 2) { \
+            if (d > prevDist * DISTANCE_BACKTRACK_THRESHOLD && i > 2) { \
                 stepSize = MIN_STEP; \
             } \
             prevDist = d; \
             t += stepSize; \
         } \
-        if (t >= maxDist || prevDist > 100.0) { \
+        /* Only overwrite dist if we didn't find a hit and loop ended naturally */ \
+        if (!foundHit && (t >= maxDist || prevDist > DISTANCE_FIELD_MAX_DIST)) { \
             dist = maxDist; \
         } \
     } while(false)

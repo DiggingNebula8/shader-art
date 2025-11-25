@@ -99,7 +99,7 @@ float getBuoySDF(vec3 p, float time) {
 
 // Get buoy normal using finite differences
 vec3 getBuoyNormal(vec3 pos, float time) {
-    const float eps = 0.01;
+    const float eps = 0.001;  // Smaller epsilon for better accuracy
     float d = getBuoySDF(pos, time);
     vec3 n = vec3(
         getBuoySDF(pos + vec3(eps, 0.0, 0.0), time) - d,

@@ -16,6 +16,13 @@
 //   - MIN_DIST: 0.001 - Minimum distance threshold for surface intersection
 //   - MAX_DIST: 150.0 - Maximum raymarching distance
 //   - MAX_WATER_DEPTH: 200.0 - Maximum depth for raymarching through water
+//   - REFINEMENT_THRESHOLD: MIN_DIST * 2.0 - Distance threshold for triggering refinement
+//   - DISTANCE_FIELD_MAX_DIST: 100.0 - Maximum distance threshold for distance field raymarching
+//   - DISTANCE_BACKTRACK_THRESHOLD: 1.5 - Multiplier threshold for detecting distance field backtracking
+//   - SURFACE_NEAR_THRESHOLD: MIN_DIST * 1.5 - Distance threshold for surface refinement
+//   - SURFACE_FAR_THRESHOLD: MIN_DIST * 0.5 - Distance threshold for skipping refinement
+//   - STEP_BACKTRACK_THRESHOLD: 1.1 - Multiplier threshold for detecting step backtracking
+//   - VOLUME_MAX_DIST: 50.0 - Maximum distance threshold for volume raymarching
 //
 // Physical Constants:
 //   - GRAVITY: 9.81 - Gravitational acceleration (m/s^2)
@@ -44,6 +51,19 @@ const int MAX_STEPS = 1000;
 const float MIN_DIST = 0.001;
 const float MAX_DIST = 150.0;
 const float MAX_WATER_DEPTH = 200.0;
+
+// Distance Field Raymarching Constants
+const float REFINEMENT_THRESHOLD = MIN_DIST * 2.0;  // Distance threshold for triggering refinement
+const float DISTANCE_FIELD_MAX_DIST = 100.0;  // Maximum distance threshold for distance field raymarching
+const float DISTANCE_BACKTRACK_THRESHOLD = 1.5;  // Multiplier threshold for detecting distance field backtracking
+
+// Surface Raymarching Constants
+const float SURFACE_NEAR_THRESHOLD = MIN_DIST * 1.5;  // Distance threshold for surface refinement
+const float SURFACE_FAR_THRESHOLD = MIN_DIST * 0.5;  // Distance threshold for skipping refinement
+const float STEP_BACKTRACK_THRESHOLD = 1.1;  // Multiplier threshold for detecting step backtracking
+
+// Volume Raymarching Constants
+const float VOLUME_MAX_DIST = 50.0;  // Maximum distance threshold for volume raymarching
 
 // Physical Constants
 const float GRAVITY = 9.81;

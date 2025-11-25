@@ -48,9 +48,9 @@ struct VolumeHit {
         for (int i = 0; i < MAX_STEPS; i++) { \
             vec3 pos = start + dir * t; \
             float h = getSDF(pos, time); \
-            if (abs(h) < MIN_DIST * 1.5) { \
+            if (abs(h) < SURFACE_NEAR_THRESHOLD) { \
                 vec3 refinedPos = pos; \
-                if (abs(h) > MIN_DIST * 0.5) { \
+                if (abs(h) > SURFACE_FAR_THRESHOLD) { \
                     float refineStep = h * 0.3; \
                     refinedPos = start + dir * (t - refineStep); \
                     float hRefined = getSDF(refinedPos, time); \
@@ -75,8 +75,8 @@ struct VolumeHit {
                 hit.gradient = vec2(0.0); \
                 break; \
             } \
-            float stepSize = clamp(h * 0.4, MIN_DIST * 0.5, 1.0); \
-            if (abs(h) > abs(prevH) * 1.1 && i > 2) { \
+            float stepSize = clamp(h * 0.4, SURFACE_FAR_THRESHOLD, 1.0); \
+            if (abs(h) > abs(prevH) * STEP_BACKTRACK_THRESHOLD && i > 2) { \
                 stepSize = MIN_DIST; \
             } \
             prevH = h; \
@@ -114,7 +114,7 @@ struct VolumeHit {
                 hit.gradient = vec2(0.0); \
                 break; \
             } \
-            if (t > maxDist || h > 50.0) { \
+            if (t > maxDist || h > VOLUME_MAX_DIST) { \
                 break; \
             } \
             float stepSize = clamp(h * 0.3, STEP_SIZE, 2.0); \
