@@ -89,9 +89,10 @@ struct DistanceFieldInfo {
             prevDist = d; \
             t += stepSize; \
         } \
-        /* Only overwrite dist if we didn't find a hit and loop ended naturally */ \
-        if (!foundHit && (t >= maxDist || prevDist > DISTANCE_FIELD_MAX_DIST)) { \
-            dist = maxDist; \
+        /* Initialize distance when raymarch loop exhausts steps */ \
+        /* If we didn't find a hit, set dist to the actual distance traveled */ \
+        if (!foundHit) { \
+            dist = min(t, maxDist); \
         } \
     } while(false)
 
@@ -124,9 +125,9 @@ float intersectionSDF(float d1, float d2) {
     return max(d1, d2);
 }
 
-// Subtraction - subtracts d1 from d2
-float subtractionSDF(float d1, float d2) {
-    return max(-d1, d2);
+// Subtraction (A - B): keeps region of A that is not inside B
+float subtractionSDF(float dA, float dB) {
+    return max(dA, -dB);
 }
 
 // ============================================================================
