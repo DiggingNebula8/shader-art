@@ -60,8 +60,10 @@ struct DistanceFieldInfo {
             float d = getSDF(pos, time); \
             if (d < REFINEMENT_THRESHOLD) { \
                 /* Binary search refinement */ \
-                float tMin = max(0.0, t - d); \
-                float tMax = t; \
+                /* Handle both outside (d > 0) and inside (d < 0) geometry cases */ \
+                float offset = clamp(abs(d), MIN_DIST, REFINEMENT_THRESHOLD); \
+                float tMin = max(0.0, t - offset); \
+                float tMax = t + offset; \
                 for (int j = 0; j < 5; j++) { \
                     float tMid = (tMin + tMax) * 0.5; \
                     vec3 refinePos = start + dir * tMid; \

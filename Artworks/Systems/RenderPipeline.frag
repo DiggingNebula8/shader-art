@@ -27,9 +27,6 @@
 #include "WaterShading.frag"
 #include "TerrainShading.frag"
 #include "ObjectShading.frag"
-// Note: WaveSystem is included for Ocean scene water surface computation in composeFinalColor
-// Other scenes may need to override composeFinalColor or provide their own water surface computation
-#include "WaveSystem.frag"
 
 // ============================================================================
 // RENDER CONTEXT STRUCTURES
@@ -47,6 +44,10 @@ struct SurfaceHit {
     vec2 gradient;
     float distance;
     int surfaceType;  // SURFACE_WATER, SURFACE_TERRAIN, etc.
+    // Optional water surface information (for terrain caustics)
+    // Scenes should set these when rendering terrain that may have water above it
+    vec3 waterSurfacePos;  // Water surface position (default: position if no water)
+    vec3 waterNormal;      // Water surface normal (default: vec3(0,1,0) if no water)
 };
 
 struct RenderResult {
@@ -116,21 +117,11 @@ vec3 composeFinalColor(SurfaceHit hit, RenderContext ctx) {
         terrainParams.light = light;
         terrainParams.sky = ctx.sky;
         
-        // Check if there's water above this terrain position (Ocean scene-specific)
-        // Note: This uses WaveSystem functions - other scenes may need different logic
-        float waterHeight = getWaveHeight(hit.position.xz, ctx.time);
-        if (hit.position.y < waterHeight) {
-            // Terrain is below water (shouldn't happen for above-water terrain, but handle gracefully)
-            vec2 gradient;
-            vec3 waterNormal = getNormal(hit.position.xz, ctx.time, gradient);
-            vec3 waterSurfacePos = vec3(hit.position.x, waterHeight, hit.position.z);
-            terrainParams.waterSurfacePos = waterSurfacePos;
-            terrainParams.waterNormal = waterNormal;
-        } else {
-            // Above-water terrain - no water above
-            terrainParams.waterSurfacePos = hit.position;
-            terrainParams.waterNormal = vec3(0.0, 1.0, 0.0);
-        }
+        // Water surface information is pre-computed by the scene's rendering function
+        // and passed via SurfaceHit. For scenes without water, these will be set to
+        // default values (no water above terrain) in the scene's render function.
+        terrainParams.waterSurfacePos = hit.waterSurfacePos;
+        terrainParams.waterNormal = hit.waterNormal;
         
         terrainParams.material = ctx.terrainMaterial;
         

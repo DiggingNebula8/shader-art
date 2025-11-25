@@ -254,12 +254,8 @@ struct WaterShadingResult {
 WaterDepthInfo calculateWaterDepthAndColor(vec3 pos, vec3 normal, vec3 viewDir, TerrainParams floorParams, WaterMaterial material) {
     WaterDepthInfo info;
     
-    // Use distance field for more accurate depth calculation
-    // Raymarch downward to find the nearest surface (terrain or object)
-    vec3 downDir = vec3(0.0, -1.0, 0.0);
-    float maxDepth = 200.0;
-    
-    // Fallback to simple height-based calculation (more efficient for most cases)
+    // Currently depth uses a simple height-based calculation; distance fields are
+    // used for translucency in calculateRefractedColor().
     float floorHeight = getTerrainHeight(pos.xz, floorParams);
     float heightBasedDepth = max(pos.y - floorHeight, 0.1);
     

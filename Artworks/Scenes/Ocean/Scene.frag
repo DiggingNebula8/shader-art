@@ -241,6 +241,9 @@ RenderResult renderOceanScene(RenderContext ctx) {
         surfaceHit.normal = objectHit.normal;
         surfaceHit.surfaceType = SURFACE_OBJECT;
         surfaceHit.gradient = vec2(0.0);
+        // Objects don't need water surface info
+        surfaceHit.waterSurfacePos = objectHit.position;
+        surfaceHit.waterNormal = vec3(0.0, 1.0, 0.0);
     } else if (closestType == SURFACE_WATER) {
         // Water surface hit
         surfaceHit.hit = true;
@@ -264,6 +267,9 @@ RenderResult renderOceanScene(RenderContext ctx) {
         
         // Update position to stabilized version for consistent shading
         surfaceHit.position = stablePos;
+        // Water surface info is the same as the hit position for water surfaces
+        surfaceHit.waterSurfacePos = stablePos;
+        surfaceHit.waterNormal = surfaceHit.normal;
     } else if (closestType == SURFACE_TERRAIN) {
         // Above-water terrain hit
         surfaceHit.hit = true;
@@ -272,6 +278,16 @@ RenderResult renderOceanScene(RenderContext ctx) {
         surfaceHit.normal = terrainHit.normal;
         surfaceHit.surfaceType = SURFACE_TERRAIN;
         surfaceHit.gradient = vec2(0.0);
+        
+        // Compute water surface information for caustics (Ocean scene-specific)
+        // This terrain is above water, but we still compute water surface info
+        // in case it's needed for shading (e.g., atmospheric effects)
+        float waterHeight = getWaveHeight(terrainHit.position.xz, ctx.time);
+        vec2 gradient;
+        vec3 waterNormal = getNormal(terrainHit.position.xz, ctx.time, gradient);
+        vec3 waterSurfacePos = vec3(terrainHit.position.x, waterHeight, terrainHit.position.z);
+        surfaceHit.waterSurfacePos = waterSurfacePos;
+        surfaceHit.waterNormal = waterNormal;
     } else {
         // No hit
         surfaceHit.hit = false;
@@ -280,6 +296,8 @@ RenderResult renderOceanScene(RenderContext ctx) {
         surfaceHit.normal = vec3(0.0);
         surfaceHit.gradient = vec2(0.0);
         surfaceHit.surfaceType = SURFACE_WATER; // Default, won't be used
+        surfaceHit.waterSurfacePos = vec3(0.0);
+        surfaceHit.waterNormal = vec3(0.0, 1.0, 0.0);
     }
     
     // Compose final color (uses ctx.rayDir for shading calculations)
@@ -302,19 +320,23 @@ RenderResult renderOceanScene(RenderContext ctx) {
 // ============================================================================
 
 // Reinhard-Jodie tone mapping
-// Separates luminance and chrominance to preserve color saturation better than basic Reinhard
-// This prevents over-compression of bright areas while maintaining good exposure compatibility
-vec3 toneMapReinhardJodie(vec3 x) {
+// Blends luminance-based and per-channel Reinhard approaches to balance color accuracy
+// and dynamic range compression. Formula: mix(color/(1+L), color/(1+color), color/(1+color))
+vec3 toneMapReinhardJodie(vec3 color) {
     // Calculate luminance
-    float luma = dot(x, vec3(0.2126, 0.7152, 0.0722));
+    float L = dot(color, vec3(0.2126, 0.7152, 0.0722));
     
-    // Apply Reinhard to luminance only
-    float toneMappedLuma = luma / (1.0 + luma);
+    // Luminance-based Reinhard: applies tone mapping uniformly based on luminance
+    vec3 luminanceBased = color / (1.0 + L);
     
-    // Preserve chrominance (color) by scaling by the ratio of tone-mapped to original luminance
-    // This prevents desaturation that basic Reinhard causes
-    vec3 chrominance = x / max(luma, 0.001); // Avoid division by zero
-    vec3 result = chrominance * toneMappedLuma;
+    // Per-channel Reinhard: applies tone mapping independently to each channel
+    vec3 perChannel = color / (1.0 + color);
+    
+    // Mix factor: use per-channel result as the blend factor (per-channel mixing)
+    // This blends between luminance-based (preserves color relationships) and
+    // per-channel (preserves saturation) approaches
+    vec3 mixFactor = perChannel;
+    vec3 result = mix(luminanceBased, perChannel, mixFactor);
     
     return clamp(result, 0.0, 1.0);
 }
