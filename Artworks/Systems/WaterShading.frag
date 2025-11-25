@@ -281,17 +281,36 @@ vec3 calculateUnderwaterFog(vec3 color, float depth, vec3 viewDir, vec3 sunDir, 
 // ============================================================================
 // WATER SHADING PARAMETERS STRUCT
 // ============================================================================
+// Consistent structure pattern:
+//   1. Core fields (position, normal, view, gradient, time)
+//   2. System configuration (floorParams - for terrain depth calculation)
+//   3. Lighting (light, sky)
+//   4. Material (material)
+//   5. Water interaction (none - this IS water, doesn't interact with itself)
+// ============================================================================
 
 struct WaterShadingParams {
+    // Core fields
     vec3 pos;                    // Surface position
     vec3 normal;                 // Surface normal
     vec3 viewDir;                // View direction
-    vec2 gradient;               // Wave gradient
+    vec2 gradient;               // Wave gradient (water-specific)
     float time;                  // Time for animation
+    
+    // System configuration
+    TerrainParams floorParams;   // Terrain params (for depth calculation)
+    // Note: Water doesn't have its own system params struct, but needs terrain
+    //       for calculating water depth and translucency
+    
+    // Lighting
     LightingInfo light;          // Lighting information (from SkySystem)
     SkyAtmosphere sky;           // Sky configuration (for reflections)
-    TerrainParams floorParams;   // Terrain params (for depth calculation)
+    
+    // Material
     WaterMaterial material;      // Water material properties (art-directable)
+    
+    // Water interaction
+    // Note: Water doesn't interact with itself, so no water interaction fields
 };
 
 struct WaterShadingResult {

@@ -16,16 +16,33 @@
 // ============================================================================
 // OBJECT SHADING PARAMETERS STRUCT
 // ============================================================================
+// Consistent structure pattern:
+//   1. Core fields (position, normal, view, time)
+//   2. System configuration (none - objects don't have system-level config)
+//   3. Lighting (light, sky)
+//   4. Material (material)
+//   5. Water interaction (optional, for scenes with water)
+// ============================================================================
 
 struct ObjectShadingParams {
+    // Core fields
     vec3 pos;                    // Object position
     vec3 normal;                 // Object normal
     vec3 viewDir;                // View direction
     float time;                  // Time for animation
+    
+    // System configuration
+    // Note: Objects don't have system-level configuration like terrain does
+    // (no ObjectParams struct needed)
+    
+    // Lighting
     LightingInfo light;          // Lighting information (from SkySystem)
     SkyAtmosphere sky;           // Sky configuration
+    
+    // Material
     ObjectMaterial material;     // Object material properties (art-directable)
-    // Optional water interaction parameters
+    
+    // Water interaction (optional - for scenes with water)
     vec3 waterSurfacePos;        // Water surface position (for wet/underwater effects)
     vec3 waterNormal;            // Water surface normal
     float waterDepth;            // Depth below water surface (0.0 = at surface, >0 = underwater)

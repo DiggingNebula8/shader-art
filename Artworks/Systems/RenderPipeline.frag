@@ -133,16 +133,23 @@ vec3 composeFinalColor(SurfaceHit hit, RenderContext ctx) {
     
     if (hit.surfaceType == SURFACE_PRIMARY || hit.surfaceType == SURFACE_WATER) {
         // Primary surface (typically water for Ocean scene, but can be any main surface)
-        // Prepare WaterShading parameters
         WaterShadingParams waterParams;
+        
+        // Core fields
         waterParams.pos = hit.position;
         waterParams.normal = hit.normal;
         waterParams.viewDir = viewDir;
         waterParams.gradient = hit.gradient;
         waterParams.time = ctx.time;
+        
+        // System configuration
+        waterParams.floorParams = ctx.terrainParams;
+        
+        // Lighting
         waterParams.light = light;
         waterParams.sky = ctx.sky;
-        waterParams.floorParams = ctx.terrainParams;
+        
+        // Material
         waterParams.material = ctx.waterMaterial;
         
         // Shade water using WaterShading system
@@ -153,38 +160,54 @@ vec3 composeFinalColor(SurfaceHit hit, RenderContext ctx) {
         // Secondary surface (typically terrain for Ocean scene, but can be any secondary surface)
         // Also handles scene-specific extensions that map to terrain (e.g., underwater terrain)
         TerrainShadingParams terrainParams;
+        
+        // Core fields
         terrainParams.pos = hit.position;
         terrainParams.normal = hit.normal;
         terrainParams.viewDir = viewDir;
         terrainParams.time = ctx.time;
+        
+        // System configuration
         terrainParams.terrainParams = ctx.terrainParams;
+        
+        // Lighting
         terrainParams.light = light;
         terrainParams.sky = ctx.sky;
         
-        // Water surface information is pre-computed by the scene's rendering function
-        // and passed via SurfaceHit. For scenes without water, these will be set to
-        // default values (no water above terrain) in the scene's render function.
+        // Material
+        terrainParams.material = ctx.terrainMaterial;
+        
+        // Water interaction (pre-computed by scene's rendering function)
+        // For scenes without water, these will be set to default values in the scene's render function
         terrainParams.waterSurfacePos = hit.waterSurfacePos;
         terrainParams.waterNormal = hit.waterNormal;
         terrainParams.waterDepth = hit.waterDepth;
         terrainParams.isWet = hit.isWet;
         terrainParams.waterMaterial = ctx.waterMaterial;
         
-        terrainParams.material = ctx.terrainMaterial;
-        
         // TerrainShading system handles its own water interactions internally
         return shadeTerrain(terrainParams);
     } else if (usesObjectShading) {
         // Object surface (above-water or underwater)
-        // Prepare ObjectShading parameters
         ObjectShadingParams objectParams;
+        
+        // Core fields
         objectParams.pos = hit.position;
         objectParams.normal = hit.normal;
         objectParams.viewDir = viewDir;
         objectParams.time = ctx.time;
+        
+        // System configuration (none - objects don't have system-level config)
+        
+        // Lighting
         objectParams.light = light;
         objectParams.sky = ctx.sky;
+        
+        // Material
         objectParams.material = ctx.objectMaterial;
+        
+        // Water interaction (pre-computed by scene's rendering function)
+        // For scenes without water, these will be set to default values in the scene's render function
         objectParams.waterSurfacePos = hit.waterSurfacePos;
         objectParams.waterNormal = hit.waterNormal;
         objectParams.waterDepth = hit.waterDepth;

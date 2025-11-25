@@ -51,18 +51,37 @@
 // TERRAIN SHADING PARAMETERS STRUCT
 // ============================================================================
 
+// ============================================================================
+// TERRAIN SHADING PARAMETERS STRUCT
+// ============================================================================
+// Consistent structure pattern:
+//   1. Core fields (position, normal, view, time)
+//   2. System configuration (terrainParams)
+//   3. Lighting (light, sky)
+//   4. Material (material)
+//   5. Water interaction (optional, for scenes with water)
+// ============================================================================
+
 struct TerrainShadingParams {
+    // Core fields
     vec3 pos;                    // Terrain position
     vec3 normal;                 // Terrain normal
     vec3 viewDir;                // View direction
     float time;                  // Time for animation
-    TerrainParams terrainParams; // Terrain configuration
-    LightingInfo light;           // Lighting information (from SkySystem)
+    
+    // System configuration
+    TerrainParams terrainParams; // Terrain system configuration
+    
+    // Lighting
+    LightingInfo light;          // Lighting information (from SkySystem)
     SkyAtmosphere sky;           // Sky configuration
+    
+    // Material
+    TerrainMaterial material;     // Terrain material properties (art-directable)
+    
+    // Water interaction (optional - for scenes with water)
     vec3 waterSurfacePos;        // Water surface position (for caustics)
     vec3 waterNormal;            // Water surface normal (for caustics)
-    TerrainMaterial material;    // Terrain material properties (art-directable)
-    // Optional water interaction parameters
     float waterDepth;            // Depth below water surface (0.0 = at surface, >0 = underwater)
     bool isWet;                  // Whether surface is wet (near water line)
     WaterMaterial waterMaterial; // Water material (for underwater effects)
