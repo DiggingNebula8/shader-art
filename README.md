@@ -278,6 +278,7 @@ This project builds upon research and techniques from the following papers and r
 - Domain Warping techniques - Natural-looking terrain feature generation
 
 ### Sky & Atmosphere System
+- Nishita, T., Dobashi, Y., & Nakamae, E. "Display of The Earth Taking into Account Atmospheric Scattering" (SIGGRAPH 1993) - Foundational atmospheric scattering model for sky rendering
 - Preetham, A. J., Shirley, P., & Smits, B. "A Practical Analytic Model for Daylight" - Physically-based sky and atmospheric scattering model
 - Rayleigh/Mie scattering theory - Atmospheric light scattering
 - Henyey-Greenstein phase function - Forward scattering approximation for fog and atmospheric effects
