@@ -49,6 +49,7 @@ struct DistanceFieldInfo {
 // Output: Stores result in 'dist' variable
 #define DISTANCE_FIELD_RAYMARCH(start, dir, maxDist, time, dist) \
     do { \
+        dist = maxDist; /* default: no hit within maxDist */ \
         float t = 0.0; \
         const float MIN_STEP = 0.1; \
         const float MAX_STEP = 2.0; \
