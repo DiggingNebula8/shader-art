@@ -276,6 +276,31 @@ float getFoliageSDF(vec3 pos, FoliageParams params) {
 
 Add to `RenderPipeline.frag` or create a scene-specific wrapper that includes the new system.
 
+**Example: Adding Foliage to a Scene**
+
+```glsl
+// In your scene file:
+#include "FoliageSystem.frag"
+#include "RenderPipeline.frag"
+
+// Define surface type for foliage (terrain-type)
+const int SURFACE_FOLIAGE = SURFACE_SCENE_EXTENSION_BASE + SURFACE_TERRAIN_TYPE(1);
+
+// In your render function:
+FoliageParams foliageParams = createDefaultFoliage();
+VolumeHit foliageHit = raymarchFoliage(start, dir, maxDist, time, foliageParams);
+
+if (foliageHit.hit && foliageHit.valid) {
+    SurfaceHit hit;
+    hit.hit = true;
+    hit.position = foliageHit.position;
+    hit.normal = foliageHit.normal;
+    hit.surfaceType = SURFACE_FOLIAGE;  // Uses terrain shading automatically
+    // ... set other fields
+    color = composeFinalColor(hit, ctx);
+}
+```
+
 ### 4. Adding a New Shading System
 
 To add a new shading system (e.g., `LavaShading`, `FoliageShading`):
@@ -354,6 +379,35 @@ Add `LavaMaterial` to `MaterialSystem.frag` following the material extension pat
 - Use forward declarations or macro-based interfaces when needed
 - Interaction systems are utility libraries - they don't create dependencies
 
+### Type Dependencies
+
+**When Type-Only Dependencies Are Acceptable:**
+
+Some systems include other systems only for type definitions (not function calls). This is acceptable when:
+
+1. **Types are closely related** - The types are conceptually related to the including system
+   - Example: `WaterShading` includes `TerrainSystem` for `TerrainParams` type (used for water depth calculation)
+
+2. **No function dependencies** - The including system doesn't call functions from the included system
+   - Functions are accessed via macros or not used at all
+   - Example: `WaterShading` uses `WATER_TERRAIN_HEIGHT` macro instead of calling `getTerrainHeight()` directly
+
+3. **Clear documentation** - The dependency is clearly documented in comments
+   - Example: `// Include TerrainSystem only for TerrainParams type definition (not for function calls)`
+
+**When to Avoid Type Dependencies:**
+
+- Types are unrelated to the including system
+- The dependency creates unnecessary coupling
+- Types change frequently (causes recompilation cascades)
+
+**Best Practices:**
+
+- Document type-only dependencies clearly
+- Use macros to access functionality instead of direct function calls
+- Consider moving shared types to `Common.frag` if used by multiple unrelated systems
+- Keep type definitions stable (avoid frequent changes)
+
 ## Integration Examples
 
 ### Example: Adding Snow to a Scene
@@ -402,6 +456,75 @@ void main() {
     vec3 color = shadeLava(params);
 }
 ```
+
+### Example: Adding New Surface Type to RenderPipeline
+
+This example shows how to add a new surface type (e.g., Lava) that integrates with RenderPipeline:
+
+**Step 1: Define Surface Type**
+
+```glsl
+// In your scene file, after including RenderPipeline.frag:
+#include "RenderPipeline.frag"
+#include "LavaShading.frag"
+
+// Define lava surface type (terrain-type, so it uses terrain shading)
+const int SURFACE_LAVA = SURFACE_SCENE_EXTENSION_BASE + SURFACE_TERRAIN_TYPE(2);
+```
+
+**Step 2: Extend RenderPipeline (if needed)**
+
+If you need custom shading logic, you can extend `composeFinalColor()`:
+
+```glsl
+// In your scene file:
+vec3 composeFinalColorExtended(SurfaceHit hit, RenderContext ctx) {
+    // Handle custom surface types first
+    if (hit.surfaceType == SURFACE_LAVA) {
+        LavaShadingParams lavaParams;
+        lavaParams.pos = hit.position;
+        lavaParams.normal = hit.normal;
+        lavaParams.viewDir = -ctx.rayDir;
+        lavaParams.time = ctx.time;
+        lavaParams.material = ctx.lavaMaterial;  // Add to RenderContext
+        lavaParams.light = evaluateLighting(ctx.sky, ctx.time);
+        lavaParams.sky = ctx.sky;
+        return shadeLava(lavaParams);
+    }
+    
+    // Fall back to standard pipeline for other types
+    return composeFinalColor(hit, ctx);
+}
+```
+
+**Step 3: Use in Render Function**
+
+```glsl
+RenderResult renderScene(RenderContext ctx) {
+    // ... raymarching logic ...
+    
+    if (lavaHit.hit && lavaHit.valid) {
+        SurfaceHit hit;
+        hit.hit = true;
+        hit.position = lavaHit.position;
+        hit.normal = lavaHit.normal;
+        hit.surfaceType = SURFACE_LAVA;
+        hit.distance = lavaHit.distance;
+        // ... set other fields ...
+        
+        RenderResult result;
+        result.color = composeFinalColorExtended(hit, ctx);
+        result.hit = true;
+        result.hitPosition = hit.position;
+        result.distance = hit.distance;
+        return result;
+    }
+    
+    // ... handle other surfaces ...
+}
+```
+
+**Note:** If your new surface type can use existing shading (terrain or object), you don't need to extend RenderPipeline - just use the helper macros to define the surface type, and it will automatically map to the correct shading system.
 
 ## Best Practices
 

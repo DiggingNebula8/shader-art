@@ -250,10 +250,10 @@ Most issues are documentation/clarity problems rather than fundamental architect
 1. ✅ **Surface type extension mechanism** - Added helper macros `SURFACE_TERRAIN_TYPE()` and `SURFACE_OBJECT_TYPE()`
 2. ✅ **Macro contracts documentation** - Created MACRO_CONTRACTS.md with complete reference
 
-### 🟡 Medium Priority (Should Consider)
-3. **RenderPipeline complexity** - Extract helper functions
-4. **Extension examples** - Add to SYSTEM_ARCHITECTURE.md
-5. **Type dependency documentation** - Clarify when acceptable
+### ✅ Fixed (Medium Priority)
+3. ✅ **RenderPipeline complexity** - Extracted helper functions (`shouldUseTerrainShading()`, `shouldUseObjectShading()`, `shouldUsePrimaryShading()`)
+4. ✅ **Extension examples** - Added comprehensive examples to SYSTEM_ARCHITECTURE.md showing how to integrate new surface types
+5. ✅ **Type dependency documentation** - Documented when type-only dependencies are acceptable and best practices
 
 ### 🟢 Low Priority (Nice to Have)
 6. **Camera naming** - Document as acceptable exception
@@ -265,6 +265,6 @@ Most issues are documentation/clarity problems rather than fundamental architect
 2. ✅ Create MACRO_CONTRACTS.md documenting all macro contracts
 3. ✅ Add helper macros for surface type extension (`SURFACE_TERRAIN_TYPE()`, `SURFACE_OBJECT_TYPE()`)
 4. ✅ Update Ocean scene to use new helper macros
-5. ⏳ Add extension examples to SYSTEM_ARCHITECTURE.md (medium priority)
-6. ⏳ Extract surface type mapping helpers in RenderPipeline.frag (medium priority)
+5. ✅ Add extension examples to SYSTEM_ARCHITECTURE.md
+6. ✅ Extract surface type mapping helpers in RenderPipeline.frag
 

@@ -111,6 +111,54 @@ struct RenderContext {
 };
 
 // ============================================================================
+// SURFACE TYPE MAPPING HELPERS
+// ============================================================================
+// Helper functions to map surface types to shading systems
+// These functions encapsulate the surface type extension convention
+
+// Check if surface type uses terrain shading
+// Includes SURFACE_SECONDARY and even-numbered scene extensions
+// Scene extensions use SURFACE_TERRAIN_TYPE() helper macro
+bool shouldUseTerrainShading(int surfaceType) {
+    // Generic terrain types
+    if (surfaceType == SURFACE_SECONDARY || surfaceType == SURFACE_TERRAIN) {
+        return true;
+    }
+    
+    // Scene-specific extensions: even offsets map to terrain shading
+    if (surfaceType >= SURFACE_SCENE_EXTENSION_BASE) {
+        int extensionOffset = surfaceType - SURFACE_SCENE_EXTENSION_BASE;
+        return (extensionOffset % 2 == 0);  // Even offset = terrain variant
+    }
+    
+    return false;
+}
+
+// Check if surface type uses object shading
+// Includes SURFACE_OBJECT and odd-numbered scene extensions
+// Scene extensions use SURFACE_OBJECT_TYPE() helper macro
+bool shouldUseObjectShading(int surfaceType) {
+    // Generic object type
+    if (surfaceType == SURFACE_OBJECT) {
+        return true;
+    }
+    
+    // Scene-specific extensions: odd offsets map to object shading
+    if (surfaceType >= SURFACE_SCENE_EXTENSION_BASE) {
+        int extensionOffset = surfaceType - SURFACE_SCENE_EXTENSION_BASE;
+        return (extensionOffset % 2 == 1);  // Odd offset = object variant
+    }
+    
+    return false;
+}
+
+// Check if surface type uses primary (water) shading
+// Includes SURFACE_PRIMARY and SURFACE_WATER
+bool shouldUsePrimaryShading(int surfaceType) {
+    return (surfaceType == SURFACE_PRIMARY || surfaceType == SURFACE_WATER);
+}
+
+// ============================================================================
 // INTEGRATION FUNCTIONS
 // ============================================================================
 // Note: Refraction and reflection are handled by WaterShading system
@@ -129,33 +177,12 @@ vec3 composeFinalColor(SurfaceHit hit, RenderContext ctx) {
     LightingInfo light = evaluateLighting(ctx.sky, ctx.time);
     vec3 viewDir = -ctx.rayDir;
     
-    // Map surface types to shading systems
-    // Generic types: SURFACE_PRIMARY, SURFACE_SECONDARY, SURFACE_OBJECT, SURFACE_VOLUME
-    // Scene-specific extensions (>= SURFACE_SCENE_EXTENSION_BASE) use helper macros:
-    //   - SURFACE_TERRAIN_TYPE(offset) creates even offsets → terrain shading
-    //   - SURFACE_OBJECT_TYPE(offset) creates odd offsets → object shading
+    // Map surface types to shading systems using helper functions
+    bool usesTerrainShading = shouldUseTerrainShading(hit.surfaceType);
+    bool usesObjectShading = shouldUseObjectShading(hit.surfaceType);
+    bool usesPrimaryShading = shouldUsePrimaryShading(hit.surfaceType);
     
-    // Helper: Check if surface type uses terrain shading
-    // Includes SURFACE_SECONDARY and even-numbered scene extensions
-    bool usesTerrainShading = (hit.surfaceType == SURFACE_SECONDARY || hit.surfaceType == SURFACE_TERRAIN);
-    if (hit.surfaceType >= SURFACE_SCENE_EXTENSION_BASE) {
-        int extensionOffset = hit.surfaceType - SURFACE_SCENE_EXTENSION_BASE;
-        if (extensionOffset % 2 == 0) {  // Even offset = terrain variant (from SURFACE_TERRAIN_TYPE)
-            usesTerrainShading = true;
-        }
-    }
-    
-    // Helper: Check if surface type uses object shading  
-    // Includes SURFACE_OBJECT and odd-numbered scene extensions
-    bool usesObjectShading = (hit.surfaceType == SURFACE_OBJECT);
-    if (hit.surfaceType >= SURFACE_SCENE_EXTENSION_BASE) {
-        int extensionOffset = hit.surfaceType - SURFACE_SCENE_EXTENSION_BASE;
-        if (extensionOffset % 2 == 1) {  // Odd offset = object variant (from SURFACE_OBJECT_TYPE)
-            usesObjectShading = true;
-        }
-    }
-    
-    if (hit.surfaceType == SURFACE_PRIMARY || hit.surfaceType == SURFACE_WATER) {
+    if (usesPrimaryShading) {
         // Primary surface (typically water for Ocean scene, but can be any main surface)
         WaterShadingParams waterParams;
         
