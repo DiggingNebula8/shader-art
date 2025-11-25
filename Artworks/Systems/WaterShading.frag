@@ -10,8 +10,9 @@
 //   - WaveSystem: For wave height/gradient queries (getWaveHeight, getWaveGradient)
 //   - TerrainSystem: For terrain height queries (getTerrainHeight)
 //   - VolumeRaymarching: For terrain raymarching (raymarchTerrain)
-//   - DistanceFieldSystem: For distance field queries used in water translucency
-//     (functions provided by DistanceFieldSystem.frag: getDistanceToSurface, getDistanceFieldInfo, etc.)
+//   - DistanceFieldSystem: For distance field algorithms and macros
+//     Note: This file uses DISTANCE_FIELD_RAYMARCH macro which requires getSDF(pos, time) macro
+//           to be defined. Scenes should define getSceneSDF() and use it via macro.
 // ============================================================================
 
 #ifndef WATER_SHADING_FRAG
@@ -25,9 +26,9 @@
 #include "TerrainSystem.frag"
 #include "DistanceFieldSystem.frag"
 
-// Note: Distance field functions (getDistanceToSurface, getDistanceFieldInfo, getDepthAlongDirection)
-// are implemented in DistanceFieldSystem.frag and available when this file is included.
-// DistanceFieldSystem.frag defines getSceneSDF() and getSceneNormal() for the Ocean scene.
+// Note: sampleTranslucency() uses DISTANCE_FIELD_RAYMARCH macro which requires
+// getSDF(pos, time) macro to be defined. Scenes should define getSceneSDF() and
+// create a macro wrapper before calling sampleTranslucency().
 
 // ============================================================================
 // WATER PROPERTIES
@@ -300,7 +301,22 @@ TranslucencyResult sampleTranslucency(vec3 start, vec3 dir, float maxDist, Terra
     }
     
     // Use distance field to raymarch to find surface hit
-    float surfaceDist = getDistanceToSurface(start, dir, maxDist, terrainParams, time);
+    // Use scene-defined macro for SDF queries (must be defined before including WaterShading.frag)
+    // Scene should define: #define WATER_SHADING_GET_SDF(pos, t, params) <scene_sdf_function>(pos, t, params)
+    // Note: This check may trigger linter warnings when checking WaterShading.frag in isolation,
+    //       but will work correctly when included after the macro is defined in scene files.
+    #ifdef WATER_SHADING_GET_SDF
+        #define getSDF(pos, t) WATER_SHADING_GET_SDF(pos, t, terrainParams)
+        float surfaceDist;
+        DISTANCE_FIELD_RAYMARCH(start, dir, maxDist, time, surfaceDist);
+        #undef getSDF
+    #else
+        // Fallback: if macro not defined, use a simple height-based approximation
+        // This allows the file to compile for linting, but scenes MUST define the macro for correct behavior
+        // Scenes should define: #define WATER_SHADING_GET_SDF(pos, t, params) getSceneSDF(pos, t, params)
+        // before including WaterShading.frag
+        float surfaceDist = maxDist;
+    #endif
     
     if (surfaceDist >= maxDist) {
         // No surface hit - just apply absorption for full distance

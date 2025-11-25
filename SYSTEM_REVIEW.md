@@ -158,9 +158,9 @@ const int SURFACE_OBJECT = 2;
 ## Summary
 
 ### Critical Issues (Must Fix):
-1. **DistanceFieldSystem.frag** - Scene-specific SDF definitions
-2. **ObjectSystem.frag** - Scene-specific object (buoy)
-3. **RenderPipeline.frag** - Hardcoded scene-specific raymarching and logic
+1. **DistanceFieldSystem.frag** - Scene-specific SDF definitions ✅ FIXED
+2. **ObjectSystem.frag** - Scene-specific object (buoy) ✅ FIXED
+3. **RenderPipeline.frag** - Hardcoded scene-specific raymarching and logic ✅ FIXED
 
 ### Minor Issues:
 4. **TerrainSystem.frag** - Ocean-specific preset name ✅ FIXED
@@ -178,27 +178,32 @@ const int SURFACE_OBJECT = 2;
 - ✅ **WaterShading.frag** - Generic water shading (depends on generic systems)
 - ✅ **WaveSystem.frag** - Generic wave system (can be used for any waves)
 
-## Recommended Refactoring
+## Refactoring Status
 
-1. **Move scene-specific code to Scene.frag:**
-   - `getSceneSDF()` and `getSceneNormal()` from DistanceFieldSystem
-   - `getBuoySDF()`, `getBuoyNormal()`, `raymarchBuoy()` from ObjectSystem
-   - Ocean-specific rendering logic from RenderPipeline
+✅ **COMPLETED:**
 
-2. **Make DistanceFieldSystem generic:**
-   - Remove scene-specific SDF definitions
-   - Keep only generic algorithms and macros
-   - API functions should accept SDF function/macro as parameter
+1. **Moved scene-specific code to Scene.frag:**
+   - ✅ `getSceneSDF()` and `getSceneNormal()` moved from DistanceFieldSystem to Scene.frag
+   - ✅ `getBuoySDF()`, `getBuoyNormal()`, `raymarchBuoy()` moved from ObjectSystem to Scene.frag
+   - ✅ Ocean-specific rendering logic (`renderOceanScene()`) created in Scene.frag
+   - ✅ Distance field API functions (`getDistanceToSurface`, etc.) moved to Scene.frag
 
-3. **Make ObjectSystem generic:**
-   - Keep only SDF primitives and operations
-   - Remove scene-specific objects
+2. **Made DistanceFieldSystem generic:**
+   - ✅ Removed scene-specific SDF definitions
+   - ✅ Kept only generic algorithms and macros
+   - ✅ Removed Ocean-scene-specific includes
 
-4. **Make RenderPipeline generic:**
-   - Accept scene configuration structure
-   - Delegate scene-specific logic to scene file
-   - Or move Ocean-specific logic to Scene.frag
+3. **Made ObjectSystem generic:**
+   - ✅ Removed scene-specific buoy object code
+   - ✅ Kept only SDF primitives and operations
+   - ✅ Removed WaveSystem dependency
 
-5. **Rename Ocean-specific presets:** ✅ DONE
-   - `createDefaultOceanFloor()` → `createFlatTerrain()` ✅ Completed
+4. **Made RenderPipeline generic:**
+   - ✅ Removed Ocean-specific `renderScene()` function
+   - ✅ Kept generic `composeFinalColor()` function
+   - ✅ Documented that scene-specific rendering should be in scene files
+   - ⚠️ Note: Still includes WaveSystem for water surface computation in `composeFinalColor()` (Ocean-specific, but needed for terrain caustics)
+
+5. **Renamed Ocean-specific presets:** ✅ DONE
+   - ✅ `createDefaultOceanFloor()` → `createFlatTerrain()` ✅ Completed
 

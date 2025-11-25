@@ -25,7 +25,277 @@
 #include "../../Systems/Common.frag"
 #include "../../Systems/MaterialSystem.frag"
 #include "../../Systems/CameraSystem.frag"
+#include "../../Systems/WaveSystem.frag"
+#include "../../Systems/TerrainSystem.frag"
+#include "../../Systems/ObjectSystem.frag"
+#include "../../Systems/DistanceFieldSystem.frag"
+#include "../../Systems/VolumeRaymarching.frag"
+
+// ============================================================================
+// OCEAN SCENE-SPECIFIC DEFINITIONS
+// ============================================================================
+// These functions define the Ocean scene geometry and are scene-specific
+// Must be defined before including WaterShading.frag (which uses getDistanceToSurface)
+// ============================================================================
+
+// ============================================================================
+// BUOY OBJECT (Ocean Scene-Specific)
+// ============================================================================
+
+// Create a buoy object at position (0, 0, 0) with optional animation
+float getBuoySDF(vec3 p, float time) {
+    // Buoy floats on water, so we need to account for wave height
+    // Position buoy at origin, floating on water surface
+    vec2 buoyBasePos = vec2(0.0, 0.0);
+    float waterHeight = getWaveHeight(buoyBasePos, time);
+    
+    // Offset by water height so buoy sits on water
+    p.y -= waterHeight;
+    
+    // Main cylindrical body (scaled up ~2.5x)
+    vec3 bodyP = p;
+    bodyP.y += 0.75; // Center the body
+    float body = sdCylinder(bodyP, 0.75, 0.375);
+    
+    // Top sphere (navigation marker)
+    vec3 topP = p;
+    topP.y += 1.75;
+    float top = sdSphere(topP, 0.3);
+    
+    // Small flag pole
+    vec3 poleP = p;
+    poleP.y += 2.125;
+    float pole = sdCylinder(poleP, 0.375, 0.025);
+    
+    // Small flag (simplified as a box)
+    vec3 flagP = p;
+    flagP.y += 2.5;
+    flagP.x += 0.125; // Offset flag to one side
+    float flag = sdBox(flagP, vec3(0.2, 0.125, 0.025));
+    
+    // Combine all parts
+    float buoy = opSmoothUnion(body, top, 0.125);
+    buoy = opUnion(buoy, pole);
+    buoy = opUnion(buoy, flag);
+    
+    return buoy;
+}
+
+// Get buoy normal using finite differences
+vec3 getBuoyNormal(vec3 pos, float time) {
+    const float eps = 0.001;  // Smaller epsilon for better accuracy
+    float d = getBuoySDF(pos, time);
+    vec3 n = vec3(
+        getBuoySDF(pos + vec3(eps, 0.0, 0.0), time) - d,
+        getBuoySDF(pos + vec3(0.0, eps, 0.0), time) - d,
+        getBuoySDF(pos + vec3(0.0, 0.0, eps), time) - d
+    );
+    return normalize(n);
+}
+
+// Raymarch to buoy object
+VolumeHit raymarchBuoy(vec3 start, vec3 dir, float maxDist, float time) {
+    // Define SDF function macro
+    #define getSDF(pos, t) getBuoySDF(pos, t)
+    
+    // Use raymarching algorithm macro
+    VolumeHit hit;
+    RAYMARCH_SURFACE_CORE(start, dir, maxDist, time, hit);
+    
+    // Calculate normal using system-specific function
+    if (hit.hit && hit.valid) {
+        hit.normal = getBuoyNormal(hit.position, time);
+    }
+    
+    #undef getSDF
+    return hit;
+}
+
+// ============================================================================
+// SCENE SDF DEFINITIONS (Ocean Scene-Specific)
+// ============================================================================
+
+// Forward declaration for macro expansion (helps linters/compilers)
+float getSceneSDF(vec3 pos, float time, TerrainParams terrainParams);
+
+// Unified scene SDF - combines terrain and objects into a single distance field
+float getSceneSDF(vec3 pos, float time, TerrainParams terrainParams) {
+    // Get terrain distance
+    float terrainDist = getTerrainSDF(pos, terrainParams);
+    
+    // Get object distance
+    float objectDist = getBuoySDF(pos, time);
+    
+    // Use smooth minimum for better blending between surfaces
+    const float smoothK = 2.0;
+    return smoothMinSDF(terrainDist, objectDist, smoothK);
+}
+
+// Scene normal function for more accurate surface queries
+vec3 getSceneNormal(vec3 pos, float time, TerrainParams terrainParams) {
+    float terrainDist = getTerrainSDF(pos, terrainParams);
+    float objectDist = getBuoySDF(pos, time);
+    
+    // Return normal of closest surface (choose based on actual distance, not abs)
+    if (terrainDist < objectDist) {
+        return getTerrainNormal(pos, terrainParams);
+    } else {
+        return getBuoyNormal(pos, time);
+    }
+}
+
+// ============================================================================
+// DISTANCE FIELD API FUNCTIONS (Ocean Scene-Specific)
+// ============================================================================
+// These functions provide a complete API for distance field queries
+// They use getSceneSDF and getSceneNormal defined above
+// ============================================================================
+
+// Get distance to nearest surface along a ray
+// Uses the unified scene SDF
+float getDistanceToSurface(vec3 start, vec3 dir, float maxDist, TerrainParams terrainParams, float time) {
+    #define getSDF(pos, t) getSceneSDF(pos, t, terrainParams)
+    float dist;
+    DISTANCE_FIELD_RAYMARCH(start, dir, maxDist, time, dist);
+    #undef getSDF
+    return dist;
+}
+
+// Get distance field information at a point
+DistanceFieldInfo getDistanceFieldInfo(vec3 pos, TerrainParams terrainParams, float time) {
+    DistanceFieldInfo info;
+    
+    float dist = getSceneSDF(pos, time, terrainParams);
+    info.distance = dist;
+    
+    // Use getSceneNormal for accurate surface position
+    vec3 normal = getSceneNormal(pos, time, terrainParams);
+    info.surfacePos = pos - normal * dist;
+    
+    return info;
+}
+
+// Get depth along a direction
+float getDepthAlongDirection(vec3 start, vec3 dir, float maxDepth, TerrainParams terrainParams, float time) {
+    return getDistanceToSurface(start, dir, maxDepth, terrainParams, time);
+}
+
+// Define macro for WaterShading to use (must be defined before including WaterShading.frag)
+// This macro wraps getSceneSDF with terrainParams for use in sampleTranslucency()
+// Note: getSceneSDF is defined above, so this macro expansion will work correctly
+#define WATER_SHADING_GET_SDF(pos, t, params) getSceneSDF(pos, t, params)
+
+// Now include shading systems (they can use the distance field functions defined above)
+#include "../../Systems/WaterShading.frag"
+#include "../../Systems/TerrainShading.frag"
+#include "../../Systems/ObjectShading.frag"
+#include "../../Systems/SkySystem.frag"
 #include "../../Systems/RenderPipeline.frag"
+
+// ============================================================================
+// OCEAN SCENE RENDERING FUNCTION
+// ============================================================================
+// Ocean-specific rendering logic that orchestrates all systems
+// This replaces the generic renderScene() from RenderPipeline for Ocean scene
+// Note: Surface type constants (SURFACE_WATER, SURFACE_TERRAIN, SURFACE_OBJECT)
+//       are defined in RenderPipeline.frag and available here via include
+// ============================================================================
+
+// Ocean scene rendering function
+RenderResult renderOceanScene(RenderContext ctx) {
+    // Raymarch all surfaces
+    VolumeHit objectHit = raymarchBuoy(ctx.cameraPos, ctx.rayDir, MAX_DIST, ctx.time);
+    VolumeHit waterHit = raymarchWaveSurface(ctx.cameraPos, ctx.rayDir, MAX_DIST, ctx.time);
+    VolumeHit terrainHit = raymarchTerrain(ctx.cameraPos, ctx.rayDir, MAX_DIST, ctx.time, ctx.terrainParams);
+    
+    SurfaceHit surfaceHit;
+    
+    // Determine which surface was hit first (closest)
+    // Check all hits and find the closest valid one
+    float closestDist = MAX_DIST;
+    int closestType = -1;
+    
+    if (objectHit.hit && objectHit.valid && objectHit.distance < closestDist) {
+        closestDist = objectHit.distance;
+        closestType = SURFACE_OBJECT;
+    }
+    if (waterHit.hit && waterHit.valid && waterHit.distance < closestDist) {
+        closestDist = waterHit.distance;
+        closestType = SURFACE_WATER;
+    }
+    if (terrainHit.hit && terrainHit.valid && terrainHit.distance < closestDist) {
+        // Only consider terrain if it's above water level (above-water terrain)
+        float terrainWaterHeight = getWaveHeight(terrainHit.position.xz, ctx.time);
+        if (terrainHit.position.y > terrainWaterHeight) {
+            closestDist = terrainHit.distance;
+            closestType = SURFACE_TERRAIN;
+        }
+    }
+    
+    // Set up surface hit based on closest surface
+    if (closestType == SURFACE_OBJECT) {
+        // Object hit
+        surfaceHit.hit = true;
+        surfaceHit.position = objectHit.position;
+        surfaceHit.distance = objectHit.distance;
+        surfaceHit.normal = objectHit.normal;
+        surfaceHit.surfaceType = SURFACE_OBJECT;
+        surfaceHit.gradient = vec2(0.0);
+    } else if (closestType == SURFACE_WATER) {
+        // Water surface hit
+        surfaceHit.hit = true;
+        surfaceHit.position = waterHit.position;
+        surfaceHit.distance = waterHit.distance;
+        surfaceHit.surfaceType = SURFACE_WATER;
+        
+        // Stabilize position to reduce jittering
+        // Use a small snap grid for XZ to ensure consistent sampling
+        // Recalculate Y from the snapped XZ to maintain accuracy
+        const float positionSnap = 0.0005;
+        vec2 snappedXZ = floor(surfaceHit.position.xz / positionSnap + 0.5) * positionSnap;
+        float stableY = getWaveHeight(snappedXZ, ctx.time);
+        vec3 stablePos = vec3(snappedXZ.x, stableY, snappedXZ.y);
+        
+        // Compute normal and gradient from stabilized position (single computation)
+        // This is the only place we compute getNormal, avoiding redundant computation
+        vec2 gradient;
+        surfaceHit.normal = getNormal(stablePos.xz, ctx.time, gradient);
+        surfaceHit.gradient = gradient;
+        
+        // Update position to stabilized version for consistent shading
+        surfaceHit.position = stablePos;
+    } else if (closestType == SURFACE_TERRAIN) {
+        // Above-water terrain hit
+        surfaceHit.hit = true;
+        surfaceHit.position = terrainHit.position;
+        surfaceHit.distance = terrainHit.distance;
+        surfaceHit.normal = terrainHit.normal;
+        surfaceHit.surfaceType = SURFACE_TERRAIN;
+        surfaceHit.gradient = vec2(0.0);
+    } else {
+        // No hit
+        surfaceHit.hit = false;
+        surfaceHit.position = ctx.cameraPos + ctx.rayDir * MAX_DIST;
+        surfaceHit.distance = MAX_DIST;
+        surfaceHit.normal = vec3(0.0);
+        surfaceHit.gradient = vec2(0.0);
+        surfaceHit.surfaceType = SURFACE_WATER; // Default, won't be used
+    }
+    
+    // Compose final color (uses ctx.rayDir for shading calculations)
+    // Note: composeFinalColor will compute water surface info for terrain if needed
+    // (Ocean-specific logic is handled in composeFinalColor via WaveSystem includes)
+    vec3 color = composeFinalColor(surfaceHit, ctx);
+    
+    // Return both color and hit data
+    RenderResult result;
+    result.color = color;
+    result.hit = surfaceHit.hit;
+    result.hitPosition = surfaceHit.position;
+    result.distance = surfaceHit.distance;
+    
+    return result;
+}
 
 // ============================================================================
 // TONE MAPPING
@@ -112,9 +382,9 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     ctx.terrainMaterial = terrainMaterial;
     ctx.objectMaterial = objectMaterial;
     
-    // Render scene using RenderPipeline
+    // Render Ocean scene using Ocean-specific rendering function
     // Returns both color and hit data (avoids duplicate raymarching)
-    RenderResult renderResult = renderScene(ctx);
+    RenderResult renderResult = renderOceanScene(ctx);
     vec3 color = renderResult.color;
     
     // Use hit data from renderScene() instead of re-raymarching

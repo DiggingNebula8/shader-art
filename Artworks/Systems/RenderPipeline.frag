@@ -1,25 +1,20 @@
 // ============================================================================
 // RENDER PIPELINE
 // ============================================================================
-// Scene.frag calls renderScene() from this file
+// Generic rendering pipeline utilities
 //
 // Responsibilities:
-//   - Orchestrates all rendering systems
 //   - Provides integration functions (refraction, reflection, composition)
-//   - Coordinates geometry, shading, and lighting systems
+//   - Coordinates shading and lighting systems
 //
 // Systems Coordinated:
-//   - WaveSystem (wave geometry)
-//   - TerrainSystem (terrain geometry)
-//   - ObjectSystem (object geometry)
-//   - DistanceFieldSystem (unified scene SDF queries - provides distance field API)
-//   - WaterShading (water material properties, uses distance field for translucency)
+//   - WaterShading (water material properties)
 //   - TerrainShading (terrain material properties)
+//   - ObjectShading (object material properties)
 //   - SkySystem (atmosphere and lighting)
-//   - VolumeRaymarching (unified raymarching algorithm)
 //
-// Main Function:
-//   - renderScene() - Called by Scene.frag to render the entire scene
+// Note: Scene-specific rendering logic (raymarching, surface detection, etc.)
+//       should be implemented in scene files, not in this generic pipeline.
 // ============================================================================
 
 #ifndef RENDER_PIPELINE_FRAG
@@ -29,27 +24,18 @@
 #include "MaterialSystem.frag"
 #include "CameraSystem.frag"
 #include "SkySystem.frag"
-#include "VolumeRaymarching.frag"
-#include "WaveSystem.frag"
-#include "TerrainSystem.frag"
-#include "ObjectSystem.frag"
-#include "DistanceFieldSystem.frag"
-
-// Note: DistanceFieldSystem.frag contains all distance field functionality:
-//   - Scene SDF definitions (getSceneSDF, getSceneNormal) for Ocean scene
-//   - Distance field query functions (getDistanceToSurface, getDistanceFieldInfo, etc.)
-// RenderPipeline includes DistanceFieldSystem and uses its functions.
-
-// Now include shading systems (they can use the distance field functions from DistanceFieldSystem)
 #include "WaterShading.frag"
 #include "TerrainShading.frag"
 #include "ObjectShading.frag"
+// Note: WaveSystem is included for Ocean scene water surface computation in composeFinalColor
+// Other scenes may need to override composeFinalColor or provide their own water surface computation
+#include "WaveSystem.frag"
 
 // ============================================================================
 // RENDER CONTEXT STRUCTURES
 // ============================================================================
 
-// Surface type constants
+// Surface type constants (generic - can be extended by scenes)
 const int SURFACE_WATER = 0;
 const int SURFACE_TERRAIN = 1;
 const int SURFACE_OBJECT = 2;
@@ -130,7 +116,8 @@ vec3 composeFinalColor(SurfaceHit hit, RenderContext ctx) {
         terrainParams.light = light;
         terrainParams.sky = ctx.sky;
         
-        // Check if there's water above this terrain position
+        // Check if there's water above this terrain position (Ocean scene-specific)
+        // Note: This uses WaveSystem functions - other scenes may need different logic
         float waterHeight = getWaveHeight(hit.position.xz, ctx.time);
         if (hit.position.y < waterHeight) {
             // Terrain is below water (shouldn't happen for above-water terrain, but handle gracefully)
@@ -167,109 +154,8 @@ vec3 composeFinalColor(SurfaceHit hit, RenderContext ctx) {
     return vec3(0.0);
 }
 
-// ============================================================================
-// MAIN RENDERING FUNCTION
-// ============================================================================
-// Called by Scene.frag (the actual shader entry point)
-// Orchestrates all systems to render the complete scene
-// ============================================================================
-
-// Main scene rendering function
-// Raymarches to find surface, then shades it
-// Returns both color and hit data to avoid duplicate raymarching
-// Uses ctx.cameraPos, ctx.rayDir, and ctx.time for all ray operations
-RenderResult renderScene(RenderContext ctx) {
-    // Raymarch all surfaces
-    VolumeHit objectHit = raymarchBuoy(ctx.cameraPos, ctx.rayDir, MAX_DIST, ctx.time);
-    VolumeHit waterHit = raymarchWaveSurface(ctx.cameraPos, ctx.rayDir, MAX_DIST, ctx.time);
-    VolumeHit terrainHit = raymarchTerrain(ctx.cameraPos, ctx.rayDir, MAX_DIST, ctx.time, ctx.terrainParams);
-    
-    SurfaceHit surfaceHit;
-    
-    // Determine which surface was hit first (closest)
-    // Check all hits and find the closest valid one
-    float closestDist = MAX_DIST;
-    int closestType = -1;
-    
-    if (objectHit.hit && objectHit.valid && objectHit.distance < closestDist) {
-        closestDist = objectHit.distance;
-        closestType = SURFACE_OBJECT;
-    }
-    if (waterHit.hit && waterHit.valid && waterHit.distance < closestDist) {
-        closestDist = waterHit.distance;
-        closestType = SURFACE_WATER;
-    }
-    if (terrainHit.hit && terrainHit.valid && terrainHit.distance < closestDist) {
-        // Only consider terrain if it's above water level (above-water terrain)
-        float terrainWaterHeight = getWaveHeight(terrainHit.position.xz, ctx.time);
-        if (terrainHit.position.y > terrainWaterHeight) {
-            closestDist = terrainHit.distance;
-            closestType = SURFACE_TERRAIN;
-        }
-    }
-    
-    // Set up surface hit based on closest surface
-    if (closestType == SURFACE_OBJECT) {
-        // Object hit
-        surfaceHit.hit = true;
-        surfaceHit.position = objectHit.position;
-        surfaceHit.distance = objectHit.distance;
-        surfaceHit.normal = objectHit.normal;
-        surfaceHit.surfaceType = SURFACE_OBJECT;
-        surfaceHit.gradient = vec2(0.0);
-    } else if (closestType == SURFACE_WATER) {
-        // Water surface hit
-        surfaceHit.hit = true;
-        surfaceHit.position = waterHit.position;
-        surfaceHit.distance = waterHit.distance;
-        surfaceHit.surfaceType = SURFACE_WATER;
-        
-        // Stabilize position to reduce jittering
-        // Use a small snap grid for XZ to ensure consistent sampling
-        // Recalculate Y from the snapped XZ to maintain accuracy
-        const float positionSnap = 0.0005;
-        vec2 snappedXZ = floor(surfaceHit.position.xz / positionSnap + 0.5) * positionSnap;
-        float stableY = getWaveHeight(snappedXZ, ctx.time);
-        vec3 stablePos = vec3(snappedXZ.x, stableY, snappedXZ.y);
-        
-        // Compute normal and gradient from stabilized position (single computation)
-        // This is the only place we compute getNormal, avoiding redundant computation
-        vec2 gradient;
-        surfaceHit.normal = getNormal(stablePos.xz, ctx.time, gradient);
-        surfaceHit.gradient = gradient;
-        
-        // Update position to stabilized version for consistent shading
-        surfaceHit.position = stablePos;
-    } else if (closestType == SURFACE_TERRAIN) {
-        // Above-water terrain hit
-        surfaceHit.hit = true;
-        surfaceHit.position = terrainHit.position;
-        surfaceHit.distance = terrainHit.distance;
-        surfaceHit.normal = terrainHit.normal;
-        surfaceHit.surfaceType = SURFACE_TERRAIN;
-        surfaceHit.gradient = vec2(0.0);
-    } else {
-        // No hit
-        surfaceHit.hit = false;
-        surfaceHit.position = ctx.cameraPos + ctx.rayDir * MAX_DIST;
-        surfaceHit.distance = MAX_DIST;
-        surfaceHit.normal = vec3(0.0);
-        surfaceHit.gradient = vec2(0.0);
-        surfaceHit.surfaceType = SURFACE_WATER; // Default, won't be used
-    }
-    
-    // Compose final color (uses ctx.rayDir for shading calculations)
-    vec3 color = composeFinalColor(surfaceHit, ctx);
-    
-    // Return both color and hit data
-    RenderResult result;
-    result.color = color;
-    result.hit = surfaceHit.hit;
-    result.hitPosition = surfaceHit.position;
-    result.distance = surfaceHit.distance;
-    
-    return result;
-}
+// Note: Scene-specific rendering functions (like renderScene()) should be implemented
+//       in scene files. This file provides only generic composition utilities.
 
 #endif // RENDER_PIPELINE_FRAG
 
