@@ -22,10 +22,10 @@
 //     └─ SkySystem - Atmosphere and lighting
 // ============================================================================
 
-#include "Common.frag"
-#include "MaterialSystem.frag"
-#include "CameraSystem.frag"
-#include "RenderPipeline.frag"
+#include "../../Systems/Common.frag"
+#include "../../Systems/MaterialSystem.frag"
+#include "../../Systems/CameraSystem.frag"
+#include "../../Systems/RenderPipeline.frag"
 
 // ============================================================================
 // TONE MAPPING
