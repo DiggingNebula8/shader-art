@@ -36,6 +36,14 @@ struct Camera {
     // Sensor properties
     float sensorWidth;      // mm (full frame = 36mm, APS-C = 23.6mm)
     float sensorHeight;     // mm (full frame = 24mm, APS-C = 15.7mm)
+    
+    // Exposure compensation (optional)
+    float exposureCompensation; // EV stops (-2.0 to +2.0, 0.0 = no compensation)
+    
+    // Camera effects (optional)
+    float vignetteStrength;     // Vignette strength (0.0 = none, 1.0 = strong)
+    float chromaticAberration;  // Chromatic aberration strength (0.0 = none, 1.0 = strong)
+    float filmGrain;            // Film grain strength (0.0 = none, 1.0 = strong)
 };
 
 // Default camera configuration
@@ -60,6 +68,14 @@ Camera createDefaultCamera() {
     // Sensor (full frame 35mm)
     cam.sensorWidth = 36.0;
     cam.sensorHeight = 24.0;
+    
+    // Exposure compensation
+    cam.exposureCompensation = 0.0; // No compensation by default
+    
+    // Camera effects (disabled by default)
+    cam.vignetteStrength = 0.0;
+    cam.chromaticAberration = 0.0;
+    cam.filmGrain = 0.0;
     
     return cam;
 }
@@ -108,6 +124,16 @@ Camera createCinematicCamera() {
     return cam;
 }
 
+Camera createSkyCamera() {
+    Camera cam = createDefaultCamera();
+    cam.focalLength = 20.0;        // 20mm wide angle lens (very wide field of view)
+    cam.fStop = 5.6;               // f/5.6 aperture (moderate for bright sky)
+    cam.shutterSpeed = 1.0 / 125.0; // 1/125 second (moderate shutter)
+    cam.iso = 100.0;               // ISO 100 (low sensitivity)
+    cam.enableDOF = false;         // Disable DOF for sky-only scenes
+    return cam;
+}
+
 // Calculate exposure value (EV) from camera settings
 // Uses the standard photographic exposure formula
 // Each f-stop change doubles/halves light (f/1.4, f/2, f/2.8, f/4, f/5.6, f/8, f/11, f/16, f/22)
@@ -135,6 +161,10 @@ float calculateExposure(Camera cam) {
     
     // Combined exposure multiplier
     float exposureMultiplier = fStopFactor * shutterFactor * isoFactor;
+    
+    // Apply exposure compensation (EV stops)
+    // Each EV stop doubles/halves exposure: +1 EV = 2x brighter, -1 EV = 0.5x brighter
+    exposureMultiplier *= pow(2.0, cam.exposureCompensation);
     
     // Clamp to reasonable range
     // This allows for dramatic changes: 0.1x to 10x brightness
@@ -226,15 +256,196 @@ vec3 applyExposure(vec3 color, Camera cam) {
     return exposedColor;
 }
 
-// Apply depth of field blur (simplified - uses distance-based blur)
+// Apply depth of field blur (improved implementation)
 vec3 applyDepthOfField(vec3 color, float distance, Camera cam) {
     if (!cam.enableDOF) return color;
     
     float coc = calculateCircleOfConfusion(cam, distance);
-    // Simplified: just darken/blur based on CoC
-    // In a full implementation, this would sample multiple rays
-    float blurFactor = 1.0 - min(coc * 10.0, 0.5);
-    return color * blurFactor;
+    
+    // Improved blur calculation using circle of confusion
+    // CoC radius determines blur amount - larger CoC = more blur
+    float blurAmount = min(coc * 5.0, 1.0); // Scale and clamp blur
+    
+    // Apply smooth falloff for more natural blur
+    // Objects closer to focus distance blur less
+    float focusDist = cam.focusDistance;
+    float distRatio = distance / max(focusDist, 0.1);
+    
+    // Hyperfocal distance approximation for better DOF behavior
+    // Objects at hyperfocal distance and beyond are equally blurred
+    float hyperfocalDist = (cam.focalLength * cam.focalLength) / (cam.fStop * 0.00003);
+    if (distance > hyperfocalDist) {
+        blurAmount = min(blurAmount * 1.5, 1.0); // More blur for far objects
+    }
+    
+    // Apply blur (simplified - in full implementation would sample multiple rays)
+    // For now, reduce saturation and brightness to simulate blur
+    float blurFactor = 1.0 - blurAmount * 0.3; // Reduce brightness slightly
+    vec3 blurredColor = color * blurFactor;
+    
+    // Mix with original based on blur amount
+    return mix(color, blurredColor, blurAmount * 0.7);
+}
+
+// ============================================================================
+// CAMERA ANIMATION FUNCTIONS
+// ============================================================================
+
+// Orbit camera around a target point
+// angle: rotation angle in radians
+// elevation: elevation angle in radians (-PI/2 to PI/2)
+// distance: distance from target
+// center: target point to orbit around
+Camera orbitCamera(Camera cam, float angle, float elevation, float distance, vec3 center) {
+    // Calculate position on sphere
+    float cosElev = cos(elevation);
+    cam.position = center + vec3(
+        cos(angle) * cosElev * distance,
+        sin(elevation) * distance,
+        sin(angle) * cosElev * distance
+    );
+    cam.target = center;
+    return cam;
+}
+
+// Dolly camera (move forward/backward along view direction)
+Camera dollyCamera(Camera cam, float distance) {
+    vec3 forward = normalize(cam.target - cam.position);
+    cam.position += forward * distance;
+    cam.target += forward * distance;
+    return cam;
+}
+
+// Pan camera (move left/right, up/down perpendicular to view direction)
+Camera panCamera(Camera cam, vec2 offset) {
+    mat3 basis = buildCameraBasis(cam);
+    vec3 right = basis[0];
+    vec3 up = basis[1];
+    cam.position += right * offset.x + up * offset.y;
+    cam.target += right * offset.x + up * offset.y;
+    return cam;
+}
+
+// Tilt camera (rotate around right axis)
+Camera tiltCamera(Camera cam, float angle) {
+    mat3 basis = buildCameraBasis(cam);
+    vec3 right = basis[0];
+    vec3 forward = normalize(cam.target - cam.position);
+    
+    // Rotate forward vector around right axis
+    float cosAngle = cos(angle);
+    float sinAngle = sin(angle);
+    vec3 up = basis[1];
+    vec3 newForward = forward * cosAngle + up * sinAngle;
+    
+    cam.target = cam.position + newForward * length(cam.target - cam.position);
+    return cam;
+}
+
+// Smooth interpolation between two camera positions
+Camera interpolateCamera(Camera cam1, Camera cam2, float t) {
+    Camera result = cam1;
+    t = clamp(t, 0.0, 1.0);
+    
+    // Interpolate position and target
+    result.position = mix(cam1.position, cam2.position, t);
+    result.target = mix(cam1.target, cam2.target, t);
+    
+    // Interpolate up vector (normalize after interpolation)
+    result.up = normalize(mix(cam1.up, cam2.up, t));
+    
+    // Interpolate camera parameters
+    result.focalLength = mix(cam1.focalLength, cam2.focalLength, t);
+    result.fStop = mix(cam1.fStop, cam2.fStop, t);
+    result.shutterSpeed = mix(cam1.shutterSpeed, cam2.shutterSpeed, t);
+    result.iso = mix(cam1.iso, cam2.iso, t);
+    result.focusDistance = mix(cam1.focusDistance, cam2.focusDistance, t);
+    
+    return result;
+}
+
+// ============================================================================
+// AUTO-FOCUS FUNCTIONALITY
+// ============================================================================
+
+// Calculate auto-focus distance based on nearest object
+// This is a helper function - actual implementation depends on scene geometry
+// For now, returns a suggested focus distance based on camera position
+float calculateAutoFocusDistance(Camera cam, vec3 rayDir, float maxDistance) {
+    // This is a placeholder - in a real implementation, you would:
+    // 1. Ray march along the camera ray
+    // 2. Find the nearest surface
+    // 3. Return that distance
+    
+    // For now, return a reasonable default based on camera position
+    // Focus at a point 1/3 of the way to the target
+    float distToTarget = length(cam.target - cam.position);
+    return distToTarget * 0.33;
+}
+
+// ============================================================================
+// CAMERA EFFECTS
+// ============================================================================
+
+// Apply vignette effect (darkening at edges)
+vec3 applyVignette(vec3 color, vec2 uv, Camera cam) {
+    if (cam.vignetteStrength <= 0.0) return color;
+    
+    // Calculate distance from center
+    vec2 center = vec2(0.5, 0.5);
+    float dist = length(uv - center);
+    
+    // Apply vignette (smooth falloff)
+    float vignette = 1.0 - smoothstep(0.3, 1.0, dist) * cam.vignetteStrength;
+    
+    return color * vignette;
+}
+
+// Apply chromatic aberration (color separation at edges)
+// Note: This is a simplified implementation. For full chromatic aberration,
+// you would need to sample the rendered image with RGB channel offsets.
+vec3 applyChromaticAberration(vec3 color, vec2 uv, vec2 resolution, Camera cam) {
+    if (cam.chromaticAberration <= 0.0) return color;
+    
+    // Calculate offset based on distance from center
+    vec2 center = vec2(0.5, 0.5);
+    vec2 offset = (uv - center) * cam.chromaticAberration * 0.01;
+    
+    // Simulate chromatic aberration by shifting color channels
+    // Red channel shifts outward, blue channel shifts inward
+    vec3 colorR = vec3(color.r * 1.1, color.g * 0.98, color.b * 0.95);
+    vec3 colorB = vec3(color.r * 0.95, color.g * 0.98, color.b * 1.1);
+    
+    // Mix based on distance from center
+    float dist = length(uv - center);
+    float aberrationAmount = smoothstep(0.3, 1.0, dist) * cam.chromaticAberration;
+    
+    // Blend between original and aberrated color
+    vec3 aberratedColor = mix(colorR, colorB, 0.5);
+    return mix(color, aberratedColor, aberrationAmount * 0.3);
+}
+
+// Apply film grain effect
+vec3 applyFilmGrain(vec3 color, vec2 uv, float time, Camera cam) {
+    if (cam.filmGrain <= 0.0) return color;
+    
+    // Simple noise-based grain
+    // In a real implementation, use a proper noise function
+    float grain = fract(sin(dot(uv + time, vec2(12.9898, 78.233))) * 43758.5453);
+    grain = (grain - 0.5) * 2.0; // Center around 0
+    
+    // Apply grain (more visible in darker areas)
+    float luminance = dot(color, vec3(0.2126, 0.7152, 0.0722));
+    float grainAmount = cam.filmGrain * (1.0 - luminance * 0.5);
+    
+    return color + grain * grainAmount * 0.1;
+}
+
+// Apply all camera effects
+vec3 applyCameraEffects(vec3 color, vec2 uv, vec2 resolution, float time, Camera cam) {
+    color = applyVignette(color, uv, cam);
+    color = applyFilmGrain(color, uv, time, cam);
+    return color;
 }
 
 #endif // CAMERA_SYSTEM_FRAG

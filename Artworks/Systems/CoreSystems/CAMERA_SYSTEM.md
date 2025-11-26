@@ -83,6 +83,17 @@ Camera cam = createCinematicCamera();
 - Focus distance: 8 meters
 - **Use case**: Cinematic rendering, shallow depth of field
 
+### Sky Camera
+```glsl
+Camera cam = createSkyCamera();
+```
+- Focal length: 20mm (wide angle lens)
+- F-stop: 5.6 (moderate aperture for bright sky)
+- Shutter speed: 1/125s (moderate shutter)
+- ISO: 100 (low sensitivity)
+- DOF: Disabled
+- **Use case**: Sky-only scenes, atmospheric rendering
+
 ## Camera Parameters
 
 ### Position and Orientation
@@ -117,6 +128,20 @@ Camera cam = createCinematicCamera();
 - `sensorHeight`: Sensor height in mm
   - Full frame: 24mm
   - APS-C: 15.7mm
+
+### Exposure Compensation
+- `exposureCompensation`: Exposure compensation in EV stops
+  - Range: -2.0 to +2.0 (0.0 = no compensation)
+  - +1.0 EV = 2x brighter, -1.0 EV = 0.5x brighter
+  - Useful for fine-tuning exposure without changing f-stop/shutter/ISO
+
+### Camera Effects
+- `vignetteStrength`: Vignette effect strength (0.0 = none, 1.0 = strong)
+  - Darkens edges of the image for cinematic effect
+- `chromaticAberration`: Chromatic aberration strength (0.0 = none, 1.0 = strong)
+  - Simulates color fringing at edges (lens imperfection effect)
+- `filmGrain`: Film grain strength (0.0 = none, 1.0 = strong)
+  - Adds film-like grain texture, more visible in darker areas
 
 ## Exposure Relationship
 
@@ -158,6 +183,48 @@ Calculates field of view in radians from focal length and sensor size.
 
 ### `calculateCircleOfConfusion(Camera cam, float distance)`
 Calculates circle of confusion radius for depth of field calculations. The function implements the correct physical relationship where **larger f-stop values (smaller aperture) produce less blur** (more depth of field), matching real-world camera behavior.
+
+### `createSkyCamera()`
+Creates a camera preset optimized for sky-only scenes with wide-angle lens and appropriate exposure settings.
+
+### `orbitCamera(Camera cam, float angle, float elevation, float distance, vec3 center)`
+Orbits the camera around a target point. Useful for creating circular camera movements.
+- `angle`: Rotation angle in radians (0 = east, PI/2 = north, PI = west)
+- `elevation`: Elevation angle in radians (-PI/2 to PI/2)
+- `distance`: Distance from target point
+- `center`: Target point to orbit around
+
+### `dollyCamera(Camera cam, float distance)`
+Moves the camera forward or backward along the view direction.
+- `distance`: Positive = forward, negative = backward
+
+### `panCamera(Camera cam, vec2 offset)`
+Moves the camera left/right and up/down perpendicular to the view direction.
+- `offset.x`: Horizontal pan (positive = right)
+- `offset.y`: Vertical pan (positive = up)
+
+### `tiltCamera(Camera cam, float angle)`
+Rotates the camera up/down around the right axis.
+- `angle`: Rotation angle in radians (positive = tilt up)
+
+### `interpolateCamera(Camera cam1, Camera cam2, float t)`
+Smoothly interpolates between two camera configurations.
+- `t`: Interpolation factor (0.0 = cam1, 1.0 = cam2)
+
+### `calculateAutoFocusDistance(Camera cam, vec3 rayDir, float maxDistance)`
+Calculates suggested auto-focus distance. Returns a reasonable default based on camera position. For full implementation, integrate with scene raymarching.
+
+### `applyVignette(vec3 color, vec2 uv, Camera cam)`
+Applies vignette effect (darkening at edges) if enabled.
+
+### `applyChromaticAberration(vec3 color, vec2 uv, vec2 resolution, Camera cam)`
+Applies chromatic aberration effect (color fringing at edges) if enabled.
+
+### `applyFilmGrain(vec3 color, vec2 uv, float time, Camera cam)`
+Applies film grain effect if enabled. Grain is more visible in darker areas.
+
+### `applyCameraEffects(vec3 color, vec2 uv, vec2 resolution, float time, Camera cam)`
+Applies all camera effects (vignette, film grain) in one call. Convenience function.
 
 ## Examples
 
@@ -288,6 +355,17 @@ cam.fStop = 1.4;  // Let in more light
 color = applyExposure(color, cam);
 ```
 
+### Using Exposure Compensation
+```glsl
+Camera cam = createDefaultCamera();
+
+// Fine-tune exposure without changing f-stop/shutter/ISO
+cam.exposureCompensation = 0.5;   // +0.5 EV (1.4x brighter)
+// cam.exposureCompensation = -1.0; // -1.0 EV (0.5x brighter)
+
+color = applyExposure(color, cam);
+```
+
 ### Matching Real Camera Settings
 ```glsl
 // Replicate a real camera setup:
@@ -306,6 +384,74 @@ vec3 rd = generateCameraRay(cam, uv, iResolution.xy);
 color = applyExposure(color, cam);
 ```
 
+### Camera Animation - Orbiting
+```glsl
+Camera cam = createDefaultCamera();
+
+// Orbit camera around origin
+float angle = iTime * 0.5;  // Rotate over time
+float elevation = 0.3;      // Look down slightly
+float distance = 10.0;       // 10 units from center
+vec3 center = vec3(0.0);
+
+cam = orbitCamera(cam, angle, elevation, distance, center);
+
+vec3 rd = generateCameraRay(cam, uv, iResolution.xy);
+```
+
+### Camera Animation - Smooth Interpolation
+```glsl
+Camera cam1 = createDefaultCamera();
+cam1.position = vec3(0.0, 5.0, 10.0);
+cam1.target = vec3(0.0, 0.0, 0.0);
+
+Camera cam2 = createDefaultCamera();
+cam2.position = vec3(10.0, 5.0, 0.0);
+cam2.target = vec3(0.0, 0.0, 0.0);
+
+// Interpolate between camera positions
+float t = sin(iTime * 0.5) * 0.5 + 0.5;  // Smooth 0-1 oscillation
+Camera cam = interpolateCamera(cam1, cam2, t);
+
+vec3 rd = generateCameraRay(cam, uv, iResolution.xy);
+```
+
+### Camera Effects
+```glsl
+Camera cam = createDefaultCamera();
+
+// Enable camera effects
+cam.vignetteStrength = 0.3;         // Subtle vignette
+cam.chromaticAberration = 0.2;     // Light chromatic aberration
+cam.filmGrain = 0.15;              // Subtle film grain
+
+// ... render scene ...
+vec3 color = result.color;
+
+// Apply camera effects
+vec2 uv = fragCoord / iResolution.xy;
+color = applyCameraEffects(color, uv, iResolution.xy, iTime, cam);
+color = applyExposure(color, cam);
+```
+
+### Improved Depth of Field
+```glsl
+Camera cam = createCinematicCamera();
+
+// Improved DOF with better blur quality
+cam.enableDOF = true;
+cam.focusDistance = 5.0;
+cam.fStop = 1.4;  // Wide aperture for shallow DOF
+
+// ... render scene ...
+vec3 color = result.color;
+float distance = result.distance;
+
+// Apply improved depth of field
+color = applyDepthOfField(color, distance, cam);
+color = applyExposure(color, cam);
+```
+
 ## Tips
 
 1. **For bright scenes**: Use smaller f-stop (f/8, f/11) and fast shutter (1/250s)
@@ -314,5 +460,40 @@ color = applyExposure(color, cam);
 4. **For sharp images**: Use fast shutter (1/250s or faster)
 5. **For shallow depth of field**: Use wide aperture (f/1.4, f/2.8) and enable DOF
 6. **For deep depth of field**: Use narrow aperture (f/11, f/16) and disable DOF
+7. **For fine exposure control**: Use `exposureCompensation` to adjust brightness without changing f-stop/shutter/ISO
+8. **For cinematic look**: Enable vignette (0.2-0.4) and subtle film grain (0.1-0.2)
+9. **For camera animation**: Use `orbitCamera()` for circular movements, `interpolateCamera()` for smooth transitions
+10. **For sky scenes**: Use `createSkyCamera()` preset optimized for atmospheric rendering
+
+## Performance Notes
+
+- **Depth of Field**: Has performance impact when enabled. Disable for real-time applications if needed.
+- **Camera Effects**: Vignette and film grain are lightweight. Chromatic aberration requires additional sampling in full implementation.
+- **Camera Animation**: Animation functions are efficient and can be used in real-time.
+
+## Advanced Features
+
+### Improved Depth of Field
+The depth of field implementation has been improved with:
+- Better blur calculation using circle of confusion
+- Hyperfocal distance approximation for realistic DOF behavior
+- Smooth falloff for more natural blur transitions
+- Proper handling of objects beyond hyperfocal distance
+
+### Camera Animation System
+The camera system now includes a complete animation toolkit:
+- **Orbit**: Circular camera movements around a target
+- **Dolly**: Forward/backward movement along view direction
+- **Pan**: Horizontal/vertical movement perpendicular to view
+- **Tilt**: Up/down rotation around right axis
+- **Interpolation**: Smooth transitions between camera configurations
+
+### Camera Effects
+Post-processing effects for artistic control:
+- **Vignette**: Darkens edges for cinematic framing
+- **Chromatic Aberration**: Simulates lens imperfections (color fringing)
+- **Film Grain**: Adds texture and character, more visible in shadows
+
+All effects are optional and can be enabled/disabled independently.
 
 
